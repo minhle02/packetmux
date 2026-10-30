@@ -156,25 +156,31 @@ is used from every host language through thin bindings. Each host keeps its own 
 - **FR-STR-1** Stream IDs are 32-bit unsigned. The client role MUST allocate odd IDs and the
   server role even IDs. 0 is reserved for the connection.
 - **FR-STR-2** Within a session, stream IDs MUST increase and MUST NOT be reused, including across
-  reconnects. When the ID space is exhausted, opening a stream MUST fail locally.
+  reconnects. When the ID space is exhausted, opening a stream MUST fail locally. A `session_id`
+  therefore belongs to one `Session` object: a peer that restarts needs a new one.
 - **FR-STR-3** Either role MAY open streams (the protocol is symmetric).
-- **FR-STR-4** An `OPEN` with the wrong parity, or with an ID already in use, MUST be a protocol
-  error.
+- **FR-STR-4** An `OPEN` with the wrong parity, or with an ID not above the highest the peer has
+  used so far, MUST be a protocol error. This also covers an ID already in use.
 - **FR-STR-5** The opener MAY send `DATA` and `EOF` before it receives `OPEN_OK` (pipelining).
-  `OPEN` MUST always reach the wire before any frame of that stream.
+  `OPEN` MUST always reach the wire before any frame of that stream. The acceptor cannot send
+  before it accepts, and `OPEN_OK` goes out first, so `DATA` or `EOF` received before `OPEN_OK` is
+  invalid for that stream (FR-ERR-2).
 - **FR-STR-6** On an inbound `OPEN`, the library MUST report it to the host. The host then accepts
   it (→ `OPEN_OK`) or rejects it with a reason code and message (→ `OPEN_ERR`). The library rejects
-  it on its own with `LIMIT_EXCEEDED` if `max_streams` is reached, and with `PEER_CLOSED` if the
-  session is closing.
+  it on its own with `LIMIT_EXCEEDED` if `max_streams` is reached. Once a `GOAWAY` is queued, nothing
+  more is sent and inbound messages are ignored.
 - **FR-STR-7** Inbound `DATA`/`EOF` that arrive before the host has accepted the stream MUST still
   be delivered to the host, in order, after the open event. If the host rejects the stream, later
   frames for it MUST be dropped silently.
 - **FR-STR-8** An `OPEN_ERR` received by the opener MUST end the stream with the received reason
   code.
-- **FR-STR-9** Stream states: `OPENING`, `OPEN`, `HALF_CLOSED_LOCAL`, `HALF_CLOSED_REMOTE`,
-  `CLOSED`. Allowed transitions follow the state machine in the RemoteDevice design (§5.2).
+- **FR-STR-9** Stream states: `SENDER_OPENING`, `SENDER_OPENING_EOF_SENT`, `RECEIVER_OPENING`,
+  `RECEIVER_OPENING_EOF_RECEIVED`, `OPEN`, `HALF_CLOSED_LOCAL`, `HALF_CLOSED_REMOTE`, `CLOSED`. The
+  sender is the side that sent `OPEN`, and the receiver is the side that received it. Allowed
+  transitions are the table in `docs/design/M2_SESSION_CORE.md` §1.2.
 - **FR-STR-10** A stream MUST close cleanly once both sides have sent `EOF`. A stream MUST close
-  with a reason code on `RST` (either direction), `OPEN_ERR`, or connection loss.
+  with a reason code on `RST` (either direction), `OPEN_ERR`, or connection loss. The host MUST see
+  the reason `OK` only for a clean close: `OK` from any other cause is reported as `PEER_CLOSED`.
 - **FR-STR-11** Writing after a local `EOF` or after close MUST fail locally and send nothing.
 - **FR-STR-12** Inbound `DATA` after the peer's `EOF` MUST reset that stream with
   `RST(PROTOCOL_ERROR)`. It does not end the connection.
@@ -204,12 +210,15 @@ is used from every host language through thin bindings. Each host keeps its own 
   and the refused amount reported to the host. The library MUST NOT grow memory without bound.
 - **FR-BP-1a** The per-stream limit keeps admission fair. One bulk stream cannot fill the whole
   session queue and so cause writes on other streams to be refused.
-- **FR-BP-1b** Control frames do not count towards these limits. They are bounded by the protocol
-  itself: one `OPEN_OK`/`OPEN_ERR`/`RST` per stream, `max_outstanding_pings`.
+- **FR-BP-1b** Control frames do not count towards these limits. They are bounded by
+  `max_queued_control_frames` instead, because a peer can trigger replies (`PONG`, `OPEN_ERR`,
+  `RST`) without limit while it stops reading. The cap is checked after each inbound message, and
+  going past it MUST end the connection with `LIMIT_EXCEEDED`. A configuration with a cap not above
+  3 × `max_streams` MUST be refused, so normal host traffic cannot reach it.
 - **FR-BP-2** When a stream's queue has room again, the library MUST tell the host that this
   stream is writable again (a "writable" event).
 - **FR-BP-3** Inbound `DATA` MUST be handed to the host as it arrives. The library MUST NOT keep
-  its own receive buffer.
+  its own receive buffer: events borrow the buffer given to `onMessage` (FR-API-5).
 
 ### 5.7 Keepalive
 
@@ -229,8 +238,10 @@ is used from every host language through thin bindings. Each host keeps its own 
   later attach a new connection to the same session.
 - **FR-SES-3** Opening a stream while no connection is attached MUST fail locally.
 - **FR-SES-4** Closing a session MUST queue `GOAWAY(code)`, end all streams with that code (`OK`
-  is reported to streams as `PEER_CLOSED`), and refuse new streams.
-- **FR-SES-5** Receiving `GOAWAY(code)` MUST end all streams with that code and close the session.
+  is reported to streams as `PEER_CLOSED`), and refuse new streams. The session MUST finish closing
+  when the host has taken the frame, or after `drain_timeout`.
+- **FR-SES-5** Receiving `GOAWAY(code)` MUST end all streams with that code (`OK` is reported to
+  streams as `PEER_CLOSED`) and close the session.
 - **FR-SES-6** The host MUST be able to list streams and reset one by ID (`RST(KILLED)` by
   default).
 - **FR-SES-7** Per stream, the library MUST expose: ID, kind, opener role, state, bytes sent, bytes
@@ -240,8 +251,11 @@ is used from every host language through thin bindings. Each host keeps its own 
 ### 5.9 Errors
 
 - **FR-ERR-1** A connection-level protocol error (FR-FRAME-4, FR-HS-2/3, FR-STR-4) MUST queue
-  `GOAWAY(PROTOCOL_ERROR)`, let the host flush it, and then declare the connection lost.
-- **FR-ERR-2** A stream-level protocol error (FR-STR-12) MUST reset only that stream.
+  `GOAWAY(PROTOCOL_ERROR)`, let the host flush it, and then declare the connection lost. If the
+  host has not taken the frame within `drain_timeout`, the connection MUST be declared lost anyway.
+- **FR-ERR-2** A stream-level protocol error MUST reset only that stream. This covers every frame
+  that is invalid for the stream's state (`docs/design/M2_SESSION_CORE.md` §1.2), including
+  FR-STR-12.
 - **FR-ERR-3** All errors MUST be reported through return values (status codes or result types).
   The public API MUST NOT throw exceptions.
 
@@ -260,8 +274,11 @@ is used from every host language through thin bindings. Each host keeps its own 
   set one timer, not poll.
 - **FR-API-4** The library MUST provide a C++ API and a C ABI (`extern "C"`) built on top of it.
   The C ABI uses opaque handles, plain structs and explicit buffer-ownership rules.
-- **FR-API-5** Ownership and lifetime of every buffer crossing the API MUST be documented. A
-  borrowed pointer MUST stay valid at least until the next call on the same session.
+- **FR-API-5** Ownership and lifetime of every buffer crossing the API MUST be documented. A buffer
+  returned by `pollTransmit` MUST stay valid until the next call on the same session. Views in an
+  event borrow the `onMessage` buffer that produced them, so the host MUST keep that buffer alive
+  until `pollEvent` is drained, and MUST drain `pollEvent` before the next `onMessage`. The library
+  MUST enforce this: `onMessage` with undrained events fails and changes nothing.
 - **FR-API-6** Several sessions MUST be able to exist in one process. They MUST share no hidden
   global mutable state.
 - **FR-API-7** The session MUST be the only public entry point for the protocol. The scheduler is
@@ -278,46 +295,39 @@ Names are illustrative. The M2 design note fixes the real API.
   many streams in one session.
 
 ```
-session = Session(role, sessionId, config)      // once per peer
+session = Session(config)                       // once per peer
 session.attachConnection(now)                   // after the host's transport connects; queues HELLO
                                                 // (again after every reconnect)
 
-id = session.openStream("tcp-forward", params)  // many per session
+id = session.openStream("tcp-forward", params, now)     // many per session
 session.acceptStream(id) / rejectStream(id, code, message)   // for streams the peer opened
-session.write(id, bytes) → accepted byte count  // queued inside the session (FR-BP)
+session.write(id, bytes, now) → accepted byte count     // queued inside the session (FR-BP)
 session.sendEof(id) / session.resetStream(id, code)
 
 // host I/O loop, single-threaded per session (NFR-CON-1)
-while transport has room and (msg = session.pollTransmit()):  transport.send(msg)
-on transport message:            session.onMessage(msg, now)
-on transport closed:             session.onConnectionLost(now)
-on timer at session.nextDeadline():  session.onTick(now)
-while (ev = session.pollEvent()):    handle StreamOpened / OpenAccepted / Data / Eof /
-                                     StreamClosed / Writable / Disconnected / SessionClosed
+on transport message:     session.onMessage(msg, now), keeping msg until events are drained
+on transport closed:      session.onConnectionLost()
+on timer:                 session.onTick(now)
+after every call:         repeat pollEvent until empty and pollTransmit while the transport has
+                          room, until neither returns anything; then set a timer for
+                          session.nextDeadlineMs()
 
-session.close(code)                              // queues GOAWAY, ends every stream
+session.close(code, now)                        // queues GOAWAY, ends every stream
 ```
+
+Time rule: only calls that record time or arm a timer take `now`.
 
 Inside the session:
 
 ```
-Session ─┬─ stream registry and state machines, handshake, keepalive, events
-         └─ Scheduler (internal): control frames first, then round-robin across the stream
-            queues, enforcing the queue limits. pollTransmit() asks it for the next frame.
+Session ─ SessionStateMachine ─┬─ one class per session state
+                               └─ SessionProcessor ─┬─ Scheduler (internal): control frames first,
+                                                    │  then round-robin across the stream queues
+                                                    └─ StreamManager: one state machine per stream
 ```
 
-### 5.11 Length-prefix framer (optional)
-
-For hosts whose transport is a byte stream (raw TCP, one QUIC stream), not a message transport.
-
-- **FR-LPF-1** The framer MUST encode one message as a 32-bit unsigned big-endian length followed
-  by the message bytes.
-- **FR-LPF-2** The decoder MUST accept input in chunks of any size, split at any byte, and yield
-  every complete message in order.
-- **FR-LPF-3** A length above the configured maximum (default: header plus the largest payload)
-  MUST be a protocol error, raised before any buffering for that message.
-- **FR-LPF-4** The framer MUST be independent of the session. A host using a message transport
-  does not use it.
+The session enforces the queue limits, using the scheduler's counters, so a future priority scheduler
+does not have to repeat that logic.
 
 ## 6. Non-functional requirements
 
@@ -367,8 +377,8 @@ For hosts whose transport is a byte stream (raw TCP, one QUIC stream), not a mes
 - **NFR-MNT-2** All code MUST be in namespace `packetmux`. C ABI symbols MUST be prefixed
   `packetmux_`.
 - **NFR-MNT-3** Public headers MUST live under `include/packetmux/`. Implementation code MUST live
-  under `src/`. Tests MUST live under `tests/`. Language bindings MUST live under
-  `bindings/<language>/`.
+  under `src/`, with session code in `src/session/` and stream code in `src/stream/`. Tests MUST live
+  under `tests/`. Language bindings MUST live under `bindings/<language>/`.
 - **NFR-MNT-4** Inside the library, the stage that picks the next frame to send (the scheduler)
   MUST sit behind an internal interface. The boundary between the session and the transport MUST
   be a message interface (push received message, pull next message to send). The layers in `ROADMAP.md`
@@ -385,10 +395,12 @@ All values MUST be configurable per session.
 | `max_streams` | 64 | FR-STR-6 |
 | `max_queued_bytes` | 1 MiB | FR-BP-1 |
 | `max_queued_bytes_per_stream` | 256 KiB | FR-BP-1 |
+| `max_queued_control_frames` | 1024 | FR-BP-1b |
 | `max_framed_message` | 5 B + `max(max_data_payload, max_control_payload)` | FR-LPF-3 |
 | `hello_timeout` | 10 s | FR-HS-4 |
 | `ping_interval` | 15 s | FR-KA-1 |
 | `dead_after` | 45 s | FR-KA-4 |
+| `drain_timeout` | 1 s | FR-ERR-1, FR-SES-4 |
 | `max_outstanding_pings` | 8 | FR-KA-5 |
 
 Note: WebRTC messages are limited to 64 KiB (SCTP), so a header plus the largest payload must stay
@@ -437,6 +449,7 @@ below that.
 | D9 | Control payload encoding | Fixed layouts, no TLV (FR-WIRE-4a) |
 | D10 | Delivery | In milestones, one agent task each (§11). Future layers are in `ROADMAP.md` |
 | D11 | `kind` and `session_id` format | ASCII `[a-zA-Z0-9-]` only, not free UTF-8 (FR-WIRE-4b) |
+| D12 | State machine structure | State pattern for sessions and streams: one class per state, handlers return the next state, and only the state machine applies it (`docs/design/M2_SESSION_CORE.md` §3) |
 
 ## 11. Delivery milestones
 

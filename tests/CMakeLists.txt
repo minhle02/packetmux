@@ -11,9 +11,20 @@ add_executable(packetmux_tests
     ByteIoTest.cpp
     CodecTest.cpp
     GoldenVectorsTest.cpp
+    KeepAliveTest.cpp
+    RoundRobinSchedulerTest.cpp
+    SessionBackpressureTest.cpp
+    SessionLifecycleTest.cpp
+    SessionPairTest.cpp
+    SessionRobustnessTest.cpp
+    SessionStreamTest.cpp
+    StreamStateMachineTest.cpp
 )
 target_link_libraries(packetmux_tests PRIVATE packetmux::packetmux GTest::gtest_main)
-target_include_directories(packetmux_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_include_directories(packetmux_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
 target_compile_definitions(packetmux_tests PRIVATE
     PACKETMUX_VECTORS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/vectors"
 )

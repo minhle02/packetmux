@@ -15,6 +15,29 @@ add_library(packetmux
     src/Codec.cpp
     src/ByteReader.cpp
     src/ByteWriter.cpp
+    src/session/EventQueue.cpp
+    src/session/KeepAlive.cpp
+    src/session/RoundRobinScheduler.cpp
+    src/session/Session.cpp
+    src/session/SessionProcessor.cpp
+    src/session/SessionStateMachine.cpp
+    src/session/state/ClosedState.cpp
+    src/session/state/ClosingState.cpp
+    src/session/state/DisconnectedState.cpp
+    src/session/state/DrainingState.cpp
+    src/session/state/EstablishedState.cpp
+    src/session/state/HandshakingState.cpp
+    src/stream/StreamManager.cpp
+    src/stream/StreamProcessor.cpp
+    src/stream/StreamStateMachine.cpp
+    src/stream/state/HalfClosedLocalState.cpp
+    src/stream/state/HalfClosedRemoteState.cpp
+    src/stream/state/OpenState.cpp
+    src/stream/state/ReceiverOpeningEofReceivedState.cpp
+    src/stream/state/ReceiverOpeningState.cpp
+    src/stream/state/SenderOpeningEofSentState.cpp
+    src/stream/state/SenderOpeningState.cpp
+    src/stream/state/StreamStateBase.cpp
 )
 add_library(packetmux::packetmux ALIAS packetmux)
 
