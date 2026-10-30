@@ -1,0 +1,296 @@
+# PacketMux protocol v2 golden vectors. Format: docs/design/M1_FRAME_CODEC.md, section 7.
+# Hex values may contain spaces. Identifier fields are hex, so invalid ones can be written.
+
+# --- Valid frames ---------------------------------------------------------------------------
+
+[hello_basic]
+wire = 01 00000000 0002 0002 7331 00000000
+type = HELLO
+stream_id = 0
+version = 2
+session_id = 7331
+
+[hello_capabilities]
+wire = 01 00000000 0002 0001 61 00000002 0102
+type = HELLO
+stream_id = 0
+version = 2
+session_id = 61
+capabilities = 0102
+
+[open_basic]
+wire = 02 00000001 000b 7463702d666f7277617264 00000002 7b7d
+type = OPEN
+stream_id = 1
+kind = 7463702d666f7277617264
+params = 7b7d
+
+[open_empty_params]
+wire = 02 00000002 0001 61 00000000
+type = OPEN
+stream_id = 2
+kind = 61
+
+[open_all_character_classes]
+wire = 02 00000001 0006 617a415a302d 00000000
+type = OPEN
+stream_id = 1
+kind = 617a415a302d
+
+[open_max_stream_id]
+wire = 02 ffffffff 0001 61 00000000
+type = OPEN
+stream_id = 4294967295
+kind = 61
+
+[open_ok]
+wire = 03 00000001
+type = OPEN_OK
+stream_id = 1
+
+[open_err_basic]
+wire = 04 00000001 03 00000002 6e6f
+type = OPEN_ERR
+stream_id = 1
+code = POLICY_DENIED
+message = 6e6f
+
+[open_err_empty_message]
+wire = 04 00000001 0a 00000000
+type = OPEN_ERR
+stream_id = 1
+code = UNSUPPORTED_KIND
+
+[data_basic]
+wire = 05 00000003 6869
+type = DATA
+stream_id = 3
+data = 6869
+
+[eof]
+wire = 06 00000003
+type = EOF
+stream_id = 3
+
+[rst_killed]
+wire = 07 00000003 06
+type = RST
+stream_id = 3
+code = KILLED
+
+[ping_one]
+wire = 08 00000000 0000000000000001
+type = PING
+stream_id = 0
+nonce = 1
+
+[ping_max_nonce]
+wire = 08 00000000 ffffffffffffffff
+type = PING
+stream_id = 0
+nonce = 18446744073709551615
+
+[pong_byte_order]
+wire = 09 00000000 0102030405060708
+type = PONG
+stream_id = 0
+nonce = 72623859790382856
+
+[goaway_auth_revoked]
+wire = 0a 00000000 07
+type = GOAWAY
+stream_id = 0
+code = AUTH_REVOKED
+
+[goaway_ok]
+wire = 0a 00000000 00
+type = GOAWAY
+stream_id = 0
+code = OK
+
+# --- Valid frames whose reason code is remapped on decode ---------------------------------------
+
+[rst_unknown_code]
+wire = 07 00000003 ff
+type = RST
+stream_id = 3
+code = PROTOCOL_ERROR
+roundtrip = false
+
+[rst_first_unknown_code]
+wire = 07 00000003 0b
+type = RST
+stream_id = 3
+code = PROTOCOL_ERROR
+roundtrip = false
+
+[rst_transport_lost]
+wire = 07 00000003 05
+type = RST
+stream_id = 3
+code = PROTOCOL_ERROR
+roundtrip = false
+
+[goaway_unknown_code]
+wire = 0a 00000000 c8
+type = GOAWAY
+stream_id = 0
+code = PROTOCOL_ERROR
+roundtrip = false
+
+[open_err_unknown_code]
+wire = 04 00000001 ff 00000000
+type = OPEN_ERR
+stream_id = 1
+code = PROTOCOL_ERROR
+roundtrip = false
+
+# --- Rejected: header ---------------------------------------------------------------------------
+
+[empty_message]
+wire =
+status = TRUNCATED
+
+[header_too_short]
+wire = 01 000000
+status = TRUNCATED
+
+[type_zero]
+wire = 00 00000000
+status = UNKNOWN_TYPE
+
+[type_past_end]
+wire = 0b 00000000
+status = UNKNOWN_TYPE
+
+[hello_on_stream]
+wire = 01 00000001 0002 0002 7331 00000000
+status = BAD_STREAM_ID
+
+[ping_on_stream]
+wire = 08 00000001 0000000000000001
+status = BAD_STREAM_ID
+
+[data_on_connection]
+wire = 05 00000000 6869
+status = BAD_STREAM_ID
+
+# --- Rejected: payload size ---------------------------------------------------------------------
+
+[data_too_large]
+wire = 05 00000003 616263
+max_data_payload = 2
+status = PAYLOAD_TOO_LARGE
+
+[hello_too_large]
+wire = 01 00000000 0002 0002 7331 00000000
+max_control_payload = 9
+status = PAYLOAD_TOO_LARGE
+
+[open_ok_with_payload]
+wire = 03 00000001 00
+status = BAD_PAYLOAD_SIZE
+
+[eof_with_payload]
+wire = 06 00000003 00
+status = BAD_PAYLOAD_SIZE
+
+[rst_no_code]
+wire = 07 00000003
+status = BAD_PAYLOAD_SIZE
+
+[rst_two_bytes]
+wire = 07 00000003 0606
+status = BAD_PAYLOAD_SIZE
+
+[goaway_no_code]
+wire = 0a 00000000
+status = BAD_PAYLOAD_SIZE
+
+[ping_seven_bytes]
+wire = 08 00000000 00000000000001
+status = BAD_PAYLOAD_SIZE
+
+[pong_nine_bytes]
+wire = 09 00000000 000000000000000001
+status = BAD_PAYLOAD_SIZE
+
+[data_empty]
+wire = 05 00000003
+status = BAD_PAYLOAD_SIZE
+
+# --- Rejected: version ----------------------------------------------------------------------------
+
+[hello_version_1]
+wire = 01 00000000 0001 0002 7331 00000000
+status = UNSUPPORTED_VERSION
+
+[hello_version_3_other_layout]
+wire = 01 00000000 0003 ff
+status = UNSUPPORTED_VERSION
+
+# --- Rejected: fields run past the end ------------------------------------------------------------
+
+[hello_no_version]
+wire = 01 00000000 00
+status = TRUNCATED
+
+[hello_capabilities_past_end]
+wire = 01 00000000 0002 0002 7331 00000001
+status = TRUNCATED
+
+[open_kind_past_end]
+wire = 02 00000001 0005 61
+status = TRUNCATED
+
+[open_huge_params_length]
+wire = 02 00000001 0001 61 ffffffff
+status = TRUNCATED
+
+[open_err_no_code]
+wire = 04 00000001
+status = TRUNCATED
+
+# --- Rejected: identifiers ------------------------------------------------------------------------
+
+[open_kind_empty]
+wire = 02 00000001 0000 00000000
+status = BAD_IDENTIFIER
+
+[open_kind_underscore]
+wire = 02 00000001 0003 615f62 00000000
+status = BAD_IDENTIFIER
+
+[open_kind_space]
+wire = 02 00000001 0003 612062 00000000
+status = BAD_IDENTIFIER
+
+[open_kind_nul]
+wire = 02 00000001 0003 610062 00000000
+status = BAD_IDENTIFIER
+
+[open_kind_non_ascii]
+wire = 02 00000001 0002 c3a9 00000000
+status = BAD_IDENTIFIER
+
+[hello_session_id_dot]
+wire = 01 00000000 0002 0003 612e62 00000000
+status = BAD_IDENTIFIER
+
+[hello_session_id_empty]
+wire = 01 00000000 0002 0000 00000000
+status = BAD_IDENTIFIER
+
+# --- Rejected: bytes left after the last field --------------------------------------------------
+
+[hello_trailing_byte]
+wire = 01 00000000 0002 0002 7331 00000000 00
+status = BAD_PAYLOAD_SIZE
+
+[open_trailing_byte]
+wire = 02 00000001 0001 61 00000000 00
+status = BAD_PAYLOAD_SIZE
+
+[open_err_trailing_byte]
+wire = 04 00000001 03 00000000 00
+status = BAD_PAYLOAD_SIZE
