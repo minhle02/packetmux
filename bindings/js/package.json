@@ -1,0 +1,12 @@
+{
+  "name": "packetmux",
+  "version": "0.1.0",
+  "description": "JS/WASM binding for the PacketMux session library",
+  "type": "module",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  }
+}

@@ -67,9 +67,45 @@ else()
         -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
         $<$<BOOL:${PACKETMUX_WERROR}>:-Werror>
     )
+    # Partial {.type = ...} initializers are deliberate: unset fields use their
+    # defaults. Newer Clang warns about them; older compilers do not know the flag.
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag(-Wno-missing-designated-field-initializers
+        PACKETMUX_HAS_NO_MISSING_DESIGNATED_WARNING)
+    if(PACKETMUX_HAS_NO_MISSING_DESIGNATED_WARNING)
+        target_compile_options(packetmux PRIVATE
+            -Wno-missing-designated-field-initializers)
+    endif()
     if(PACKETMUX_NO_EXCEPTIONS)
         target_compile_options(packetmux PRIVATE -fno-exceptions -fno-rtti)
     endif()
+endif()
+
+if(EMSCRIPTEN)
+    # The module for bindings/js. The exported list comes from the C header, so a
+    # new function cannot be forgotten.
+    file(READ include/packetmux/PacketMuxC.h PACKETMUX_C_HEADER)
+    string(REGEX MATCHALL "packetmux_(session|frame|config)_[a-z_]+\\("
+        PACKETMUX_C_FUNCTIONS "${PACKETMUX_C_HEADER}")
+    list(REMOVE_DUPLICATES PACKETMUX_C_FUNCTIONS)
+    list(TRANSFORM PACKETMUX_C_FUNCTIONS REPLACE "\\($" "")
+    list(TRANSFORM PACKETMUX_C_FUNCTIONS PREPEND "_")
+    list(APPEND PACKETMUX_C_FUNCTIONS _malloc _free)
+    list(JOIN PACKETMUX_C_FUNCTIONS "," PACKETMUX_EXPORTED_FUNCTIONS)
+
+    add_executable(packetmux_wasm bindings/js/LayoutCheck.cpp)
+    target_link_libraries(packetmux_wasm PRIVATE packetmux)
+    set_target_properties(packetmux_wasm PROPERTIES
+        OUTPUT_NAME packetmux
+        SUFFIX .mjs
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bindings/js/dist
+    )
+    target_link_options(packetmux_wasm PRIVATE
+        -Os -fno-exceptions -fno-rtti
+        -sWASM_BIGINT -sMODULARIZE -sEXPORT_ES6 -sALLOW_MEMORY_GROWTH
+        -sEXPORTED_FUNCTIONS=${PACKETMUX_EXPORTED_FUNCTIONS}
+        -sEXPORTED_RUNTIME_METHODS=HEAPU8
+    )
 endif()
 
 if(PACKETMUX_BUILD_TESTS)
