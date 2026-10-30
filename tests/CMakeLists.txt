@@ -29,6 +29,19 @@ target_compile_definitions(packetmux_tests PRIVATE
     PACKETMUX_VECTORS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/vectors"
 )
 
+# Compiled as C: it proves the public C header is valid C and drives the library
+# through nothing but the C ABI.
+enable_language(C)
+add_executable(packetmux_c_api_test CApiAcceptanceTest.c)
+target_link_libraries(packetmux_c_api_test PRIVATE packetmux::packetmux)
+set_target_properties(packetmux_c_api_test PROPERTIES
+    C_STANDARD 99
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF
+    LINKER_LANGUAGE CXX
+)
+add_test(NAME packetmux_c_api_test COMMAND packetmux_c_api_test)
+
 include(GoogleTest)
 gtest_discover_tests(packetmux_tests)
 

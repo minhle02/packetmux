@@ -15,6 +15,7 @@ add_library(packetmux
     src/Codec.cpp
     src/ByteReader.cpp
     src/ByteWriter.cpp
+    src/capi/PacketMuxC.cpp
     src/session/EventQueue.cpp
     src/session/KeepAlive.cpp
     src/session/RoundRobinScheduler.cpp
@@ -47,6 +48,13 @@ target_include_directories(packetmux
     PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     PRIVATE ${PROJECT_SOURCE_DIR}/src
 )
+
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(packetmux
+        PRIVATE PACKETMUX_BUILDING_DLL
+        INTERFACE PACKETMUX_USING_DLL
+    )
+endif()
 
 if(MSVC)
     target_compile_options(packetmux PRIVATE /W4 /permissive- $<$<BOOL:${PACKETMUX_WERROR}>:/WX>)

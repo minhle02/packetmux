@@ -460,7 +460,7 @@ A milestone is done when its exit criteria pass. The next milestone builds only 
 |---|---|---|---|
 | M1 | Build skeleton and frame codec: CMake library target, GoogleTest setup, frame types, reason codes, encode/decode of every frame type, golden-vector files | FR-WIRE-\*, FR-FRAME-\*, NFR-PORT-1/2/4/5/7, NFR-MNT-\* | Codec unit tests and golden vectors pass on the native build |
 | M2 | Stream and session core (C++ API): handshake, stream lifecycle, round-robin scheduler, bounded queues, keepalive, errors, events, time injection | FR-HS-\*, FR-STR-\*, FR-SCH-\*, FR-BP-\*, FR-KA-\*, FR-SES-\*, FR-ERR-\*, FR-API-1/2/3/5/6, NFR-CON-\*, NFR-SEC-1/2 | Scripted scenario tests pass; two sessions back to back in memory carry data both ways; 10 000 open/close cycles leave nothing behind |
-| M3 | C ABI over the C++ API | FR-API-4/5, NFR-MNT-2 | The M2 scenarios pass again through a C-only test |
+| M3 | C ABI over the C++ API | FR-API-4/5, NFR-MNT-2 | A test compiled as C drives the full session and stream lifecycle through the ABI alone. Protocol details stay covered by the M2 tests |
 | M4 | Bindings: Python (`bindings/python/`) and JS/WASM (`bindings/js/`); Emscripten build | NFR-PORT-3/6 | Golden vectors pass in both bindings; Python ↔ JS interop over a real WebSocket |
 | M5 | Length-prefix framer, fuzzing, sanitizers, performance and size targets | FR-LPF-\*, NFR-SEC-3/4, NFR-PERF-\* | Framer split-point tests pass; fuzzers run clean; NFR-PERF targets measured and met (or the targets revised) |
 
