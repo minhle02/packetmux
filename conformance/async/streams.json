@@ -47,8 +47,9 @@
     {"name": "large-write-is-intact", "requirement": "FR-AST-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
       {"op": "connect"},
       {"op": "open", "kind": "echo", "as": "s"},
-      {"op": "write", "stream": "s", "data": {"repeat": "ab", "count": 1048576}},
-      {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 1048576}}
+      {"op": "write", "stream": "s", "data": {"repeat": "ab", "count": 1048576}, "background": "writing"},
+      {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 1048576}},
+      {"op": "await", "task": "writing"}
     ]},
     {"name": "concurrent-writes-do-not-interleave", "requirement": "FR-AST-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
       {"op": "connect"},
@@ -65,8 +66,8 @@
       {"op": "settle"},
       {"op": "expect_pending", "task": "writing"},
       {"op": "release", "side": "client"},
-      {"op": "await", "task": "writing"},
-      {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 1048576}}
+      {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 1048576}},
+      {"op": "await", "task": "writing"}
     ]},
     {"name": "blocked-writer-fails-when-the-stream-ends", "requirement": "FR-AST-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
       {"op": "connect"},
@@ -81,9 +82,10 @@
       {"op": "connect"},
       {"op": "open", "kind": "echo", "as": "s"},
       {"op": "write", "stream": "s", "data": {"repeat": "ab", "count": 1048576}, "background": "writing"},
-      {"op": "eof", "stream": "s"},
-      {"op": "await", "task": "writing"},
+      {"op": "eof", "stream": "s", "background": "ending"},
       {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 1048576}},
+      {"op": "await", "task": "writing"},
+      {"op": "await", "task": "ending"},
       {"op": "expect_eof", "stream": "s"}
     ]},
     {"name": "read-returns-the-end-of-stream", "requirement": "FR-AST-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
@@ -107,13 +109,41 @@
       {"op": "eof", "stream": "s"},
       {"op": "expect_error", "stream": "s", "call": "write", "error": "StreamClosed"}
     ]},
-    {"name": "read-buffer-limit-resets-only-that-stream", "requirement": "FR-AST-5", "handlers": {"echo": "echo", "flood": "flood:5000"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500, "max_read_buffer": 1000}, "steps": [
+    {"name": "a-stalled-reader-leaves-other-streams-working", "requirement": "FR-FC-16", "handlers": {"echo": "echo", "flood": "flood:600000"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
       {"op": "connect"},
       {"op": "open", "kind": "echo", "as": "other"},
       {"op": "open", "kind": "flood", "as": "s"},
-      {"op": "expect_stream_closed", "stream": "s", "code": "LIMIT_EXCEEDED"},
-      {"op": "write", "stream": "other", "data": "aa"},
-      {"op": "expect_read", "stream": "other", "data": "aa"}
+      {"op": "settle", "ms": 50},
+      {"op": "expect_high_water", "stream": "s", "value": 262144},
+      {"op": "write", "stream": "other", "data": "aabb"},
+      {"op": "expect_read", "stream": "other", "data": "aabb"},
+      {"op": "expect_bytes", "stream": "s", "count": 600000}
+    ]},
+    {"name": "a-transfer-many-windows-long-completes", "requirement": "FR-FC-16", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": {"repeat": "ab", "count": 2000000}, "background": "writing"},
+      {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 2000000}},
+      {"op": "await", "task": "writing"}
+    ]},
+    {"name": "five-stalled-streams-do-not-block-a-sixth", "requirement": "FR-FC-16", "handlers": {"echo": "echo", "flood": "flood:600000"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "flood", "as": "a"},
+      {"op": "open", "kind": "flood", "as": "b"},
+      {"op": "open", "kind": "flood", "as": "c"},
+      {"op": "open", "kind": "flood", "as": "d"},
+      {"op": "open", "kind": "flood", "as": "e"},
+      {"op": "settle", "ms": 50},
+      {"op": "open", "kind": "echo", "as": "other"},
+      {"op": "write", "stream": "other", "data": "aabb"},
+      {"op": "expect_read", "stream": "other", "data": "aabb"}
+    ]},
+    {"name": "a-close-finishes-while-a-stream-is-stalled", "requirement": "FR-FC-14", "handlers": {"flood": "flood:600000"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "flood", "as": "s"},
+      {"op": "settle", "ms": 50},
+      {"op": "close"},
+      {"op": "expect_closed"}
     ]},
     {"name": "reset-reaches-the-peer", "requirement": "FR-AST-6", "handlers": {"echo": "echo", "wait": "record-close"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
       {"op": "connect"},

@@ -128,9 +128,6 @@ class Stream:
         self._read_buffer.append(chunk)
         self._read_bytes += len(chunk)
         self.read_high_water = max(self.read_high_water, self._read_bytes)
-        if self._read_bytes > self._host.max_read_buffer:
-            self._host.reset_in_drain(self.id, Reason.LIMIT_EXCEEDED)  # STREAM_CLOSED follows
-            return
         self._readable.set()
 
     def on_eof(self) -> None:
@@ -156,9 +153,10 @@ class Stream:
     # --- Internals -------------------------------------------------------------------------
 
     def _take(self) -> bytes:
-        """The one path bytes leave by, which is where credit will be returned (FR-AST-7)."""
+        """The one path bytes leave by, so it is where credit goes back (FR-AST-7)."""
         chunk = self._read_buffer.popleft()
         self._read_bytes -= len(chunk)
+        self._host.consume(self.id, len(chunk))
         return chunk
 
     def _check_writable(self) -> None:

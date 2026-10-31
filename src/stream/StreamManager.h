@@ -34,7 +34,9 @@ class StreamManager {
 
   // Returns false if the OPEN is a connection-level protocol error.
   bool onPeerOpen(const FrameView& i_frame);
-  void onFrame(const FrameView& i_frame);
+  void onPeerHello(const uint32_t i_receiveWindow);
+  // Returns false if the frame breaks the credit rules: a connection error.
+  bool onFrame(const FrameView& i_frame);
 
   SessionStatus accept(const uint32_t i_streamId);
   SessionStatus reject(const uint32_t i_streamId, const ReasonCode i_code,
@@ -42,6 +44,7 @@ class StreamManager {
   SessionStatus write(const uint32_t i_streamId,
                       const std::span<const uint8_t> i_bytes,
                       size_t* const o_accepted);
+  SessionStatus consume(const uint32_t i_streamId, const uint64_t i_bytes);
   SessionStatus sendEof(const uint32_t i_streamId);
   SessionStatus reset(const uint32_t i_streamId, const ReasonCode i_code);
 

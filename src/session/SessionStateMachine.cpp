@@ -70,6 +70,11 @@ SessionStatus SessionStateMachine::write(const uint32_t i_streamId,
   return m_processor.streams().write(i_streamId, i_bytes, o_accepted);
 }
 
+SessionStatus SessionStateMachine::consume(const uint32_t i_streamId,
+                                           const uint64_t i_bytes) {
+  return m_processor.streams().consume(i_streamId, i_bytes);
+}
+
 SessionStatus SessionStateMachine::sendEof(const uint32_t i_streamId) {
   return m_processor.streams().sendEof(i_streamId);
 }

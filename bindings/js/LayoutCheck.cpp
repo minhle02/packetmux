@@ -26,6 +26,7 @@ static_assert(offsetof(packetmux_config_t, ping_interval_ms) == 56U);
 static_assert(offsetof(packetmux_config_t, dead_after_ms) == 64U);
 static_assert(offsetof(packetmux_config_t, drain_timeout_ms) == 72U);
 static_assert(offsetof(packetmux_config_t, max_outstanding_pings) == 80U);
+static_assert(offsetof(packetmux_config_t, receive_window) == 84U);
 
 static_assert(sizeof(packetmux_limits_t) == 8U);
 static_assert(offsetof(packetmux_limits_t, max_data_payload) == 0U);
@@ -42,7 +43,7 @@ static_assert(offsetof(packetmux_event_t, kind) == 28U);
 static_assert(offsetof(packetmux_event_t, params) == 36U);
 static_assert(offsetof(packetmux_event_t, data) == 44U);
 
-static_assert(sizeof(packetmux_stream_info_t) == 48U);
+static_assert(sizeof(packetmux_stream_info_t) == 56U);
 static_assert(offsetof(packetmux_stream_info_t, stream_id) == 0U);
 static_assert(offsetof(packetmux_stream_info_t, kind) == 4U);
 static_assert(offsetof(packetmux_stream_info_t, opener) == 12U);
@@ -51,8 +52,9 @@ static_assert(offsetof(packetmux_stream_info_t, bytes_sent) == 16U);
 static_assert(offsetof(packetmux_stream_info_t, bytes_received) == 24U);
 static_assert(offsetof(packetmux_stream_info_t, created_at_ms) == 32U);
 static_assert(offsetof(packetmux_stream_info_t, last_activity_ms) == 40U);
+static_assert(offsetof(packetmux_stream_info_t, send_credit) == 48U);
 
-static_assert(sizeof(packetmux_frame_t) == 72U);
+static_assert(sizeof(packetmux_frame_t) == 80U);
 static_assert(offsetof(packetmux_frame_t, type) == 0U);
 static_assert(offsetof(packetmux_frame_t, stream_id) == 4U);
 static_assert(offsetof(packetmux_frame_t, version) == 8U);
@@ -65,3 +67,5 @@ static_assert(offsetof(packetmux_frame_t, code) == 44U);
 static_assert(offsetof(packetmux_frame_t, message) == 48U);
 static_assert(offsetof(packetmux_frame_t, data) == 56U);
 static_assert(offsetof(packetmux_frame_t, nonce) == 64U);
+static_assert(offsetof(packetmux_frame_t, receive_window) == 72U);
+static_assert(offsetof(packetmux_frame_t, credit) == 76U);

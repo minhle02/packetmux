@@ -17,6 +17,9 @@ class CodecError(Exception):
         super().__init__(self.status.name)
 
 
+DEFAULT_RECEIVE_WINDOW = 256 * 1024
+
+
 @dataclass
 class Frame:
     type: FrameType = FrameType.UNKNOWN
@@ -31,6 +34,8 @@ class Frame:
     message: bytes = b""
     data: bytes = b""
     nonce: int = 0
+    receive_window: int = DEFAULT_RECEIVE_WINDOW
+    credit: int = 0
 
 
 def _limits(max_data_payload: int | None, max_control_payload: int | None) -> _native.Limits:
@@ -69,6 +74,8 @@ def decode_frame(
         message=copy_of(native.message),
         data=copy_of(native.data),
         nonce=native.nonce,
+        receive_window=native.receive_window,
+        credit=native.credit,
     )
 
 
@@ -93,6 +100,8 @@ def encode_frame(
         message=view_of(frame.message),
         data=view_of(frame.data),
         nonce=frame.nonce,
+        receive_window=frame.receive_window,
+        credit=frame.credit,
     )
     capacity = (
         len(session_id)

@@ -67,6 +67,10 @@ class Session {
   SessionStatus write(const uint32_t i_streamId,
                       const std::span<const uint8_t> i_bytes,
                       const uint64_t i_nowMs, size_t* const o_accepted);
+  // Says the host's consumer has taken this many DATA bytes, which gives the
+  // peer its credit back. A stream that is never consumed stalls after one
+  // receive window. OK if the stream has already closed.
+  SessionStatus consume(const uint32_t i_streamId, const uint64_t i_bytes);
   SessionStatus sendEof(const uint32_t i_streamId);
   SessionStatus resetStream(const uint32_t i_streamId,
                             const ReasonCode i_code = REASON_CODE_KILLED);

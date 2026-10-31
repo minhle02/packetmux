@@ -29,6 +29,8 @@ class StreamStateMachine {
   void setState(const StreamState i_state);
 
   StreamStep onFrame(const FrameView& i_frame);
+  bool takePeerCredit(const size_t i_bytes);
+  bool consume(const uint64_t i_bytes);
   StreamStep onAccept();
   StreamStep onReject(const ReasonCode i_code,
                       const std::span<const uint8_t> i_message);

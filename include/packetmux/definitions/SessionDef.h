@@ -10,7 +10,8 @@ namespace packetmux {
 constexpr uint64_t NO_DEADLINE = std::numeric_limits<uint64_t>::max();
 
 constexpr uint32_t DEFAULT_MAX_STREAMS = 64U;
-constexpr size_t DEFAULT_MAX_QUEUED_BYTES = 1024U * 1024U;
+// max_streams x the per-stream limit, so stalled streams cannot block others.
+constexpr size_t DEFAULT_MAX_QUEUED_BYTES = 16U * 1024U * 1024U;
 constexpr size_t DEFAULT_MAX_QUEUED_BYTES_PER_STREAM = 256U * 1024U;
 constexpr size_t DEFAULT_MAX_QUEUED_CONTROL_FRAMES = 1024U;
 constexpr size_t DEFAULT_MAX_OUTSTANDING_PINGS = 8U;

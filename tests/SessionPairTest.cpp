@@ -88,6 +88,7 @@ class PairHost {
           m_received[event.streamId].insert(m_received[event.streamId].end(),
                                             event.data.begin(),
                                             event.data.end());
+          ASSERT_EQ(m_session.consume(event.streamId, event.data.size()), OK);
           break;
         case EVENT_TYPE_EOF:
           m_eofReceived.insert(event.streamId);

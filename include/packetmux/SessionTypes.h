@@ -89,6 +89,9 @@ struct SessionConfig {
   uint64_t deadAfterMs = DEFAULT_DEAD_AFTER_MS;
   uint64_t drainTimeoutMs = DEFAULT_DRAIN_TIMEOUT_MS;
   size_t maxOutstandingPings = DEFAULT_MAX_OUTSTANDING_PINGS;
+  // What the peer may send per stream before this side consumes it. Must be
+  // at least 2 x limits.maxDataPayload.
+  uint32_t receiveWindow = DEFAULT_RECEIVE_WINDOW;
 };
 
 /**
@@ -117,6 +120,7 @@ struct StreamInfo {
   uint64_t bytesReceived = 0U;
   uint64_t createdAtMs = 0U;
   uint64_t lastActivityMs = 0U;  // last DATA accepted or received
+  uint64_t sendCredit = 0U;      // what the peer lets this side send now
 };
 
 }  // namespace packetmux

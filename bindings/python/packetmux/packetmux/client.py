@@ -31,8 +31,7 @@ class ClientOptions:
     connect_timeout: float = 10.0
     reconnect_backoff: Sequence[float] = (0.5, 1, 2, 4, 8)  # the last value repeats
     inflight_limit: int = 64 * 1024
-    max_read_buffer: int = 16 * 1024 * 1024
-    session: Mapping[str, int] = field(default_factory=dict)  # core config: max_streams, ...
+    session: Mapping[str, int] = field(default_factory=dict)  # core config: receive_window, ...
 
 
 class _State:
@@ -157,7 +156,6 @@ class Client:
             capabilities,
             handler_table(handlers),
             options.inflight_limit,
-            options.max_read_buffer,
             options.session,
         )
         self._state: _State = _State(self)

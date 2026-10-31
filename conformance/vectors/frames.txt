@@ -4,14 +4,14 @@
 # --- Valid frames ---------------------------------------------------------------------------
 
 [hello_basic]
-wire = 01 00000000 0002 00 0002 7331 00000000
+wire = 01 00000000 0002 00 00040000 0002 7331 00000000
 type = HELLO
 stream_id = 0
 version = 2
 session_id = 7331
 
 [hello_resuming]
-wire = 01 00000000 0002 01 0002 7331 00000000
+wire = 01 00000000 0002 01 00040000 0002 7331 00000000
 type = HELLO
 stream_id = 0
 version = 2
@@ -19,12 +19,32 @@ resuming = 1
 session_id = 7331
 
 [hello_capabilities]
-wire = 01 00000000 0002 00 0001 61 00000002 0102
+wire = 01 00000000 0002 00 00040000 0001 61 00000002 0102
 type = HELLO
 stream_id = 0
 version = 2
 session_id = 61
 capabilities = 0102
+
+[hello_receive_window]
+wire = 01 00000000 0002 00 00000002 0002 7331 00000000
+type = HELLO
+stream_id = 0
+version = 2
+receive_window = 2
+session_id = 7331
+
+[window_basic]
+wire = 0b 00000003 00020000
+type = WINDOW
+stream_id = 3
+credit = 131072
+
+[window_largest]
+wire = 0b 00000003 ffffffff
+type = WINDOW
+stream_id = 3
+credit = 4294967295
 
 [open_basic]
 wire = 02 00000001 000b 7463702d666f7277617264 00000002 7b7d
@@ -174,7 +194,7 @@ wire = 00 00000000
 status = UNKNOWN_TYPE
 
 [type_past_end]
-wire = 0b 00000000
+wire = 0c 00000000
 status = UNKNOWN_TYPE
 
 [hello_on_stream]
@@ -197,7 +217,7 @@ max_data_payload = 2
 status = PAYLOAD_TOO_LARGE
 
 [hello_too_large]
-wire = 01 00000000 0002 00 0002 7331 00000000
+wire = 01 00000000 0002 00 00040000 0002 7331 00000000
 max_control_payload = 10
 status = PAYLOAD_TOO_LARGE
 
@@ -254,7 +274,7 @@ wire = 01 00000000 0002
 status = TRUNCATED
 
 [hello_capabilities_past_end]
-wire = 01 00000000 0002 00 0002 7331 00000001
+wire = 01 00000000 0002 00 00040000 0002 7331 00000001
 status = TRUNCATED
 
 [open_kind_past_end]
@@ -292,17 +312,17 @@ wire = 02 00000001 0002 c3a9 00000000
 status = BAD_IDENTIFIER
 
 [hello_session_id_dot]
-wire = 01 00000000 0002 00 0003 612e62 00000000
+wire = 01 00000000 0002 00 00040000 0003 612e62 00000000
 status = BAD_IDENTIFIER
 
 [hello_session_id_empty]
-wire = 01 00000000 0002 00 0000 00000000
+wire = 01 00000000 0002 00 00040000 0000 00000000
 status = BAD_IDENTIFIER
 
 # --- Rejected: bytes left after the last field --------------------------------------------------
 
 [hello_trailing_byte]
-wire = 01 00000000 0002 00 0002 7331 00000000 00
+wire = 01 00000000 0002 00 00040000 0002 7331 00000000 00
 status = BAD_PAYLOAD_SIZE
 
 [open_trailing_byte]
@@ -316,5 +336,35 @@ status = BAD_PAYLOAD_SIZE
 # --- Rejected: a flag that is neither 0 nor 1 -----------------------------------------------------
 
 [hello_bad_flag]
-wire = 01 00000000 0002 02 0002 7331 00000000
+wire = 01 00000000 0002 02 00040000 0002 7331 00000000
 status = BAD_FLAG
+
+# --- Rejected: flow control ----------------------------------------------------------------------
+
+[hello_no_receive_window]
+wire = 01 00000000 0002 00 0004
+status = TRUNCATED
+
+[hello_receive_window_zero]
+wire = 01 00000000 0002 00 00000000 0002 7331 00000000
+status = BAD_WINDOW
+
+[hello_receive_window_one]
+wire = 01 00000000 0002 00 00000001 0002 7331 00000000
+status = BAD_WINDOW
+
+[window_credit_zero]
+wire = 0b 00000003 00000000
+status = BAD_WINDOW
+
+[window_on_connection]
+wire = 0b 00000000 00000001
+status = BAD_STREAM_ID
+
+[window_short]
+wire = 0b 00000003 0001
+status = BAD_PAYLOAD_SIZE
+
+[window_long]
+wire = 0b 00000003 00000001 00
+status = BAD_PAYLOAD_SIZE

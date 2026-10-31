@@ -59,7 +59,6 @@ conformance suite, not a reading of the C++ source.
 - Wire transports other than the in-memory one (WebSocket, WebRTC, TCP, QUIC), TLS, authentication,
   device locking. The consumer implements the Transport and decides who is allowed in, through a hook
   (FR-SRV-3).
-- Credit-based flow control (`WINDOW` frames).
 - Priority classes and weighted scheduling. Planned as a separate layer (ROADMAP.md §3).
 - A connection pool with more than one live connection per session.
 - Retransmission, acknowledgements, or resuming streams across a reconnect. Planned as a separate
@@ -254,7 +253,8 @@ keeps session state and never starts anything on its own (FR-API-1).
 - **FR-BP-2** When a stream's queue has room again, the library MUST tell the host that this
   stream is writable again (a "writable" event).
 - **FR-BP-3** Inbound `DATA` MUST be handed to the host as it arrives. The library MUST NOT keep
-  its own receive buffer: events borrow the buffer given to `onMessage` (FR-API-5).
+  its own receive buffer: events borrow the buffer given to `onMessage` (FR-API-5). What the host
+  may hold is bounded by credit (§5.18).
 
 ### 5.7 Keepalive
 
@@ -478,13 +478,12 @@ does not have to repeat that logic.
 - **FR-AST-4** Reading MUST return the next chunk in order, and a distinct end-of-stream value once
   the peer has half-closed and all data has been read. A reset MUST fail the next read with its
   reason code, even if data is still buffered (D18). Async iteration MUST be supported.
-- **FR-AST-5** The SDK stream MUST buffer received data, because the core does not (FR-BP-3). The
-  buffer MUST be bounded by `max_read_buffer`. Going past it MUST reset that stream with
-  `LIMIT_EXCEEDED`, and MUST NOT affect other streams.
+- **FR-AST-5** The SDK stream MUST buffer received data, because the core does not (FR-BP-3). Credit
+  bounds the buffer to `receive_window` (§5.18). A slow reader slows its own stream, and is not reset.
 - **FR-AST-6** A stream MUST expose half-close, reset with a reason code, a way to wait until it has
   closed, and the details in FR-SES-7, plus the high-water mark of its read buffer.
 - **FR-AST-7** All reads MUST go through one internal path that knows how many bytes the consumer has
-  taken, so that credit flow control (ROADMAP.md §4) can be added without changing the consumer API.
+  taken, and that path MUST report those bytes to the core (FR-FC-9).
 - **FR-AST-8** A consumer MUST be able to declare a stream type: a kind plus typed params fields. The
   SDK then encodes and decodes the params, so neither side handles bytes or repeats the kind. The
   encoding is JSON. On the wire, params stay opaque bytes (FR-WIRE-5), and the core does not change.
@@ -529,6 +528,34 @@ does not have to repeat that logic.
   specs and scenarios with it (D8).
 - **FR-CONF-8** The suite MUST be shown to catch bugs: deliberate bugs injected into a binding or an
   SDK MUST make it fail.
+
+### 5.18 Credit flow control
+
+- **FR-FC-1** Each side MUST announce `receive_window` in `HELLO`. It applies to every stream, for
+  that connection.
+- **FR-FC-2** A sender MUST NOT send `DATA` past its credit. A stream starts with the peer's
+  `receive_window`, and gains what `WINDOW` grants.
+- **FR-FC-3** Credit MUST be per stream. A stream without credit MUST NOT delay another stream.
+- **FR-FC-4** Only `DATA` payload uses credit. `EOF` MUST stay behind its stream's data.
+- **FR-FC-5** Data queued before a local close MUST keep receiving credit, and MUST still be sent.
+- **FR-FC-6** `DATA` past the credit given MUST be a connection error with `PROTOCOL_ERROR`.
+- **FR-FC-7** `WINDOW` that takes credit above the peer's `receive_window` MUST be the same error.
+- **FR-FC-8** A receiver MUST grant credit once at least half of `receive_window` has been consumed
+  and not yet granted, and only for data its consumer has taken. It need not grant after the peer's
+  `EOF`.
+- **FR-FC-9** The host MUST report consumed bytes. Reporting for a stream that has closed is not an
+  error. Reporting more than was delivered MUST be refused.
+- **FR-FC-10** `WINDOW` for a stream with nothing left to send MUST be ignored.
+- **FR-FC-11** A sender MUST cut frames to at most half the peer's `receive_window`, so that a stream
+  waiting for credit always leaves enough with the receiver to trigger a grant.
+- **FR-FC-12** A write MUST accept nothing until the peer's `HELLO` has arrived, and the stream MUST
+  then be told it is writable.
+- **FR-FC-13** Each connection MUST use the window from its own `HELLO`.
+- **FR-FC-14** Closing MUST NOT wait for credit.
+- **FR-FC-15** A `receive_window` below 2 × `max_data_payload` MUST be refused as configuration.
+- **FR-FC-16** A stalled reader MUST leave other streams working, however many streams have stalled.
+- **FR-FC-17** Browser transports cannot be paused, so a browser cannot slow a peer by reading its
+  socket more slowly. Credit is the only receive limit there, and it MUST NOT rely on the transport.
 
 ## 6. Non-functional requirements
 
@@ -609,8 +636,9 @@ server.
 | `max_data_payload` | 16 000 B | FR-FRAME-3, FR-SCH-4 |
 | `max_control_payload` | 32 KiB | FR-FRAME-3 |
 | `max_streams` | 64 | FR-STR-6 |
-| `max_queued_bytes` | 1 MiB | FR-BP-1 |
+| `max_queued_bytes` | 16 MiB | FR-BP-1 |
 | `max_queued_bytes_per_stream` | 256 KiB | FR-BP-1 |
+| `receive_window` | 256 KiB (D25) | FR-FC-1 |
 | `max_queued_control_frames` | 1024 | FR-BP-1b |
 | `max_framed_message` | 5 B + `max(max_data_payload, max_control_payload)` | FR-LPF-3 |
 | `hello_timeout` | 10 s | FR-HS-4 |
@@ -629,24 +657,19 @@ below that.
 | `connect_timeout` | 10 s | FR-CLI-4 |
 | `grace_period` | 120 s | FR-SRV-5 |
 | `max_sessions` | 1024 (D19) | FR-SRV-6 |
-| `max_read_buffer` | 16 MiB (D17) | FR-AST-5 |
 
 ## 8. Known limitations (accepted for this version)
 
-- **No per-stream receive backpressure.** Without credit flow control, a host can only slow a peer
-  by pulling messages from its transport more slowly, and that stalls every stream on the
-  connection. A slow consumer can delay other streams. Credit flow control is planned for a later
-  protocol version (D8).
 - **No priority.** Round-robin gives equal turns per stream. A latency-sensitive stream gets no
   preference over a bulk transfer, beyond taking its turn. See ROADMAP.md §3.
 - **Head-of-line blocking.** With one transport over TCP or SCTP, packet loss stalls all streams.
   See ROADMAP.md §2.
 - **Unknown progress after connection loss.** As in v1, a `TRANSPORT_LOST` stream gives no
   indication of which data reached the peer. See ROADMAP.md §2.
-- **A consumer that falls far behind loses its stream.** Without credit flow control, the only ways
-  to bound a read buffer are to stall every stream or to reset the slow one. The SDK resets it
-  (FR-AST-5, D17). A transfer whose consumer falls `max_read_buffer` behind fails, and is not slowed
-  down, until credit exists (ROADMAP.md §4).
+- **A stream speed cap on long paths.** A stream cannot go faster than `receive_window` / round trip,
+  which is 12.8 MB/s at 20 ms with the default. A consumer can raise the window.
+- **A writer that does not read can wait forever on an echoing peer.** Once the peer's replies fill
+  the window, the peer stops reading. A consumer MUST read while it writes on such a stream.
 - **Reconnect does not hide a lost connection.** The session survives, but its streams end with
   `TRANSPORT_LOST`, and the consumer opens new ones.
 
@@ -695,13 +718,15 @@ Added for the SDK (2026-10-31):
 | D14 | Import path | Async at the top level of each package, sync binding under a separate import (FR-SDK-2) |
 | D15 | Reconnect | In the SDK, on by default, through the dial function. There is no attempt limit: it retries until closed, until the dial function gives up, or until the peer sends `GOAWAY` (FR-CLI-2, FR-CLI-3) |
 | D16 | Which roles each SDK has | Client and server in both languages (FR-SRV-8) |
-| D17 | A read buffer past its limit | Reset that stream and leave the others alone. The default is 16 MiB, to be checked against real transfers before release (FR-AST-5, §8) |
+| D17 | Retired by D24. A read buffer past its limit | Reset that stream and leave the others alone. The default is 16 MiB, to be checked against real transfers before release (FR-AST-5, §8) |
 | D18 | Data buffered when a reset arrives | The read fails at once and the buffer is dropped. A reset means abort, and both RemoteDevice hosts behave this way today (FR-AST-4) |
 | D19 | SDK defaults | `reconnect_backoff`, `inflight_limit`, `connect_timeout` and `grace_period` keep RemoteDevice's current values. `max_sessions` is new, because nothing bounds sessions today, and 1024 is a starting value |
 | D20 | Packaging | Installing the SDK MUST NOT need `PYTHONPATH` or an environment variable, or "one import" is not true. Python ships as a distributable wheel with the native library inside it, installable with `pip` and usable as a dependency in any `pyproject.toml`. TypeScript ships as an npm package with the WASM inside it. A macOS wheel and the npm package come with the SDK. Linux and Windows wheels follow when those builds exist, because a wheel with native code is built per platform |
 | D21 | Who generates the session ID | Always the SDK. An ID chosen by a consumer is fragile: reusing one after a restart restarts the stream IDs on a live server session, which is a protocol error (FR-STR-2, FR-STR-4), and a guessable ID is easier to take over. A restarted client is a new session (FR-CLI-1a) |
 | D22 | A re-dial for a session the server no longer has | It fails, and the consumer connects again for a new session. The server never recreates a session under an ID a client is resuming, so the client's stream ID state always matches a real peer. The two `HELLO`s look the same today, so `HELLO` gains `resuming`, and `SESSION_NOT_FOUND` is added. v2 is unreleased, so this changes v2 itself (D8) (FR-HS-7, FR-CLI-4a, FR-SRV-9) |
 | D23 | Stream params in the SDK | Typed, declared once per language, and encoded as JSON, with validators of our own and no schema library. Raw `bytes` stay available. The wire stays bytes (FR-AST-8, FR-AST-9) |
+| D24 | A slow reader | Credit flow control goes into v2, which is unreleased (D8). It replaces the read buffer reset of D17, because a real `adb push` of 200 MB failed with the 16 MiB default (M10). `max_read_buffer` is removed |
+| D25 | The window | One `receive_window` per side, in `HELLO`, fixed for the connection. The default is 256 KiB, RemoteDevice's value and the largest tested that keeps the round trip beside a transfer under 1 ms (M10) |
 
 ## 11. Delivery milestones
 

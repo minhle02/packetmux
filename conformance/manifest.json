@@ -10,6 +10,7 @@
     "sync/streams.json",
     "sync/scheduling.json",
     "sync/backpressure.json",
+    "sync/credit.json",
     "sync/keepalive.json",
     "sync/errors.json",
     "sync/regressions.json"

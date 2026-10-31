@@ -50,6 +50,16 @@ class StreamProcessor {
 
   void forgetBlocked(const uint32_t i_streamId);
 
+  void setPeerReceiveWindow(const uint32_t i_window);
+  void openCredit(const uint32_t i_streamId);
+  void retireCredit(const uint32_t i_streamId);
+  // Both return false if the peer broke the credit rules.
+  bool takePeerCredit(StreamRecord* const o_record, const size_t i_bytes);
+  bool onWindow(const uint32_t i_streamId, const uint32_t i_credit);
+  // Returns false if i_bytes is more than was delivered.
+  bool consume(StreamRecord* const o_record, const uint64_t i_bytes);
+  uint64_t sendCredit(const uint32_t i_streamId) const;
+
   // Room returned: tells each blocked stream that has room again.
   void notifyWritable();
 
@@ -64,6 +74,7 @@ class StreamProcessor {
   Scheduler* m_scheduler;
   EventQueue* m_events;
   std::vector<uint32_t> m_blockedStreams;
+  uint32_t m_peerReceiveWindow;  // 0 until the peer's HELLO
   uint64_t m_nowMs;
 };
 

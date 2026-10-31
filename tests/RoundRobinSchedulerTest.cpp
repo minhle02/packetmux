@@ -22,6 +22,15 @@ Bytes drain(RoundRobinScheduler* const o_scheduler) {
   return order;
 }
 
+void push(RoundRobinScheduler* const o_scheduler, const uint32_t i_streamId,
+          std::vector<uint8_t>&& i_message, const size_t i_dataBytes) {
+  constexpr uint64_t PLENTY = 1024U * 1024U;
+  if (o_scheduler->credit(i_streamId) == 0U) {
+    o_scheduler->openCredit(i_streamId, PLENTY);
+  }
+  o_scheduler->pushStreamFrame(i_streamId, std::move(i_message), i_dataBytes);
+}
+
 TEST(RoundRobinSchedulerTest, EmptyPopsNothing) {
   RoundRobinScheduler scheduler;
   QueuedFrame frame;
@@ -31,7 +40,7 @@ TEST(RoundRobinSchedulerTest, EmptyPopsNothing) {
 
 TEST(RoundRobinSchedulerTest, ControlGoesFirstInOrder) {
   RoundRobinScheduler scheduler;
-  scheduler.pushStreamFrame(1U, tag(10U), 1U);
+  push(&scheduler, 1U, tag(10U), 1U);
   scheduler.pushControl(tag(1U));
   scheduler.pushControl(tag(2U));
   EXPECT_EQ(scheduler.controlCount(), 2U);
@@ -40,8 +49,8 @@ TEST(RoundRobinSchedulerTest, ControlGoesFirstInOrder) {
 
 TEST(RoundRobinSchedulerTest, ControlPushedLaterStillOvertakesData) {
   RoundRobinScheduler scheduler;
-  scheduler.pushStreamFrame(1U, tag(10U), 1U);
-  scheduler.pushStreamFrame(1U, tag(11U), 1U);
+  push(&scheduler, 1U, tag(10U), 1U);
+  push(&scheduler, 1U, tag(11U), 1U);
   QueuedFrame frame;
   ASSERT_TRUE(scheduler.pop(&frame));
   EXPECT_EQ(frame.message, tag(10U));
@@ -51,41 +60,41 @@ TEST(RoundRobinSchedulerTest, ControlPushedLaterStillOvertakesData) {
 
 TEST(RoundRobinSchedulerTest, OneFramePerStreamPerTurn) {
   RoundRobinScheduler scheduler;
-  scheduler.pushStreamFrame(1U, tag(10U), 1U);
-  scheduler.pushStreamFrame(1U, tag(11U), 1U);
-  scheduler.pushStreamFrame(1U, tag(12U), 1U);
-  scheduler.pushStreamFrame(3U, tag(30U), 1U);
-  scheduler.pushStreamFrame(5U, tag(50U), 1U);
-  scheduler.pushStreamFrame(5U, tag(51U), 1U);
+  push(&scheduler, 1U, tag(10U), 1U);
+  push(&scheduler, 1U, tag(11U), 1U);
+  push(&scheduler, 1U, tag(12U), 1U);
+  push(&scheduler, 3U, tag(30U), 1U);
+  push(&scheduler, 5U, tag(50U), 1U);
+  push(&scheduler, 5U, tag(51U), 1U);
   EXPECT_EQ(drain(&scheduler), (Bytes{10U, 30U, 50U, 11U, 51U, 12U}));
 }
 
 TEST(RoundRobinSchedulerTest, StreamOrderIsKept) {
   RoundRobinScheduler scheduler;
-  scheduler.pushStreamFrame(1U, tag(1U), 1U);
-  scheduler.pushStreamFrame(1U, tag(2U), 1U);
-  scheduler.pushStreamFrame(1U, tag(3U), 0U);  // EOF, after the stream's DATA
+  push(&scheduler, 1U, tag(1U), 1U);
+  push(&scheduler, 1U, tag(2U), 1U);
+  push(&scheduler, 1U, tag(3U), 0U);  // EOF, after the stream's DATA
   EXPECT_EQ(drain(&scheduler), (Bytes{1U, 2U, 3U}));
 }
 
 TEST(RoundRobinSchedulerTest, StreamJoiningMidRoundWaitsItsTurn) {
   RoundRobinScheduler scheduler;
-  scheduler.pushStreamFrame(1U, tag(10U), 1U);
-  scheduler.pushStreamFrame(1U, tag(11U), 1U);
-  scheduler.pushStreamFrame(3U, tag(30U), 1U);
+  push(&scheduler, 1U, tag(10U), 1U);
+  push(&scheduler, 1U, tag(11U), 1U);
+  push(&scheduler, 3U, tag(30U), 1U);
   QueuedFrame frame;
   ASSERT_TRUE(scheduler.pop(&frame));
   EXPECT_EQ(frame.message, tag(10U));
-  scheduler.pushStreamFrame(5U, tag(50U), 1U);
+  push(&scheduler, 5U, tag(50U), 1U);
   EXPECT_EQ(drain(&scheduler), (Bytes{30U, 11U, 50U}));
 }
 
 TEST(RoundRobinSchedulerTest, DropStreamRemovesOnlyThatStream) {
   RoundRobinScheduler scheduler;
   scheduler.pushControl(tag(1U));
-  scheduler.pushStreamFrame(1U, tag(10U), 4U);
-  scheduler.pushStreamFrame(3U, tag(30U), 8U);
-  scheduler.pushStreamFrame(5U, tag(50U), 16U);
+  push(&scheduler, 1U, tag(10U), 4U);
+  push(&scheduler, 3U, tag(30U), 8U);
+  push(&scheduler, 5U, tag(50U), 16U);
   scheduler.dropStream(3U);
   scheduler.dropStream(99U);
   EXPECT_EQ(scheduler.queuedBytes(3U), 0U);
@@ -95,9 +104,9 @@ TEST(RoundRobinSchedulerTest, DropStreamRemovesOnlyThatStream) {
 
 TEST(RoundRobinSchedulerTest, ByteCountersFollowEveryOperation) {
   RoundRobinScheduler scheduler;
-  scheduler.pushStreamFrame(1U, tag(10U), 100U);
-  scheduler.pushStreamFrame(1U, tag(11U), 50U);
-  scheduler.pushStreamFrame(3U, tag(30U), 7U);
+  push(&scheduler, 1U, tag(10U), 100U);
+  push(&scheduler, 1U, tag(11U), 50U);
+  push(&scheduler, 3U, tag(30U), 7U);
   EXPECT_EQ(scheduler.queuedBytes(1U), 150U);
   EXPECT_EQ(scheduler.queuedBytes(3U), 7U);
   EXPECT_EQ(scheduler.totalQueuedBytes(), 157U);
@@ -125,7 +134,7 @@ TEST(RoundRobinSchedulerTest, ControlFramesDoNotCountAsDataBytes) {
 TEST(RoundRobinSchedulerTest, DropAllStreamsKeepsControl) {
   RoundRobinScheduler scheduler;
   scheduler.pushControl(tag(1U));
-  scheduler.pushStreamFrame(1U, tag(10U), 1U);
+  push(&scheduler, 1U, tag(10U), 1U);
   scheduler.dropAllStreams();
   EXPECT_EQ(scheduler.totalQueuedBytes(), 0U);
   EXPECT_EQ(drain(&scheduler), (Bytes{1U}));
@@ -134,7 +143,7 @@ TEST(RoundRobinSchedulerTest, DropAllStreamsKeepsControl) {
 TEST(RoundRobinSchedulerTest, ClearRemovesEverything) {
   RoundRobinScheduler scheduler;
   scheduler.pushControl(tag(1U));
-  scheduler.pushStreamFrame(1U, tag(10U), 1U);
+  push(&scheduler, 1U, tag(10U), 1U);
   scheduler.clear();
   EXPECT_TRUE(scheduler.empty());
   EXPECT_EQ(scheduler.controlCount(), 0U);
@@ -142,10 +151,74 @@ TEST(RoundRobinSchedulerTest, ClearRemovesEverything) {
 
 TEST(RoundRobinSchedulerTest, StreamCanRequeueAfterDraining) {
   RoundRobinScheduler scheduler;
-  scheduler.pushStreamFrame(1U, tag(10U), 1U);
+  push(&scheduler, 1U, tag(10U), 1U);
   drain(&scheduler);
-  scheduler.pushStreamFrame(1U, tag(11U), 1U);
+  push(&scheduler, 1U, tag(11U), 1U);
   EXPECT_EQ(drain(&scheduler), (Bytes{11U}));
+}
+
+TEST(RoundRobinSchedulerTest, AStreamWithoutCreditIsParked) {
+  RoundRobinScheduler scheduler;
+  scheduler.openCredit(1U, 2U);
+  scheduler.pushStreamFrame(1U, tag(10U), 2U);
+  scheduler.pushStreamFrame(1U, tag(11U), 2U);
+  QueuedFrame frame;
+  ASSERT_TRUE(scheduler.pop(&frame));
+  EXPECT_EQ(scheduler.credit(1U), 0U);
+  EXPECT_FALSE(scheduler.pop(&frame));
+  EXPECT_FALSE(scheduler.empty());
+
+  EXPECT_TRUE(scheduler.addCredit(1U, 2U, 4U));
+  EXPECT_TRUE(scheduler.pop(&frame));
+  EXPECT_TRUE(scheduler.empty());
+}
+
+TEST(RoundRobinSchedulerTest, AParkedStreamDoesNotHoldUpOthers) {
+  RoundRobinScheduler scheduler;
+  scheduler.openCredit(1U, 0U);
+  scheduler.pushStreamFrame(1U, tag(10U), 1U);
+  push(&scheduler, 3U, tag(30U), 1U);
+  QueuedFrame frame;
+  ASSERT_TRUE(scheduler.pop(&frame));
+  EXPECT_EQ(frame.message, tag(30U));
+  EXPECT_FALSE(scheduler.pop(&frame));
+}
+
+TEST(RoundRobinSchedulerTest, CreditAboveTheLimitIsRefused) {
+  RoundRobinScheduler scheduler;
+  scheduler.openCredit(1U, 4U);
+  EXPECT_TRUE(scheduler.addCredit(1U, 1U, 5U));
+  EXPECT_FALSE(scheduler.addCredit(1U, 1U, 5U));
+  EXPECT_EQ(scheduler.credit(1U), 5U);
+}
+
+TEST(RoundRobinSchedulerTest, CreditForAnUnknownStreamIsIgnored) {
+  RoundRobinScheduler scheduler;
+  EXPECT_TRUE(scheduler.addCredit(1U, 1U, 5U));
+}
+
+TEST(RoundRobinSchedulerTest, ARetiredStreamKeepsItsCreditUntilItsFramesGo) {
+  RoundRobinScheduler scheduler;
+  scheduler.openCredit(1U, 2U);
+  scheduler.pushStreamFrame(1U, tag(10U), 2U);
+  scheduler.pushStreamFrame(1U, tag(11U), 2U);
+  QueuedFrame frame;
+  ASSERT_TRUE(scheduler.pop(&frame));
+  scheduler.retireCredit(1U);
+  EXPECT_FALSE(scheduler.pop(&frame));
+
+  EXPECT_TRUE(scheduler.addCredit(1U, 2U, 4U));
+  EXPECT_TRUE(scheduler.pop(&frame));
+  EXPECT_TRUE(scheduler.empty());
+  EXPECT_EQ(scheduler.credit(1U), 0U);
+}
+
+TEST(RoundRobinSchedulerTest, DroppingAParkedStreamEmptiesTheScheduler) {
+  RoundRobinScheduler scheduler;
+  scheduler.openCredit(1U, 0U);
+  scheduler.pushStreamFrame(1U, tag(10U), 1U);
+  scheduler.dropStream(1U);
+  EXPECT_TRUE(scheduler.empty());
 }
 
 }  // namespace

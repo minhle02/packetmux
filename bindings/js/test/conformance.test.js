@@ -79,6 +79,8 @@ class Harness {
       type: FrameType[fields.type],
       streamId: fields.stream_id ?? 0,
       resuming: fields.resuming ?? false,
+      receiveWindow: fields.receive_window,
+      credit: fields.credit,
       sessionId: fields.session_id ?? '',
       capabilities: fromHex(fields.capabilities ?? ''),
       kind: fields.kind ?? '',
@@ -136,6 +138,7 @@ const steps = {
     }
   },
   eof: (h, s) => h.call(s, 'sendEof', s.stream),
+  consume: (h, s) => h.call(s, 'consume', s.stream, s.bytes),
   reset: (h, s) => h.call(s, 'resetStream', s.stream, Reason[s.code]),
   close: (h, s) => h.call(s, 'close', Reason[s.code], h.nowMs),
   drain: (h) => { h.frames(); h.events(); },

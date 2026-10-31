@@ -52,7 +52,7 @@ status = BAD_IDENTIFIER
 | `wire` | The full message, in hex |
 | `status` | Expected decode status. Default `OK` |
 | `type`, `code` | Names |
-| `stream_id`, `version`, `nonce` | Decimal |
+| `stream_id`, `version`, `nonce`, `receive_window`, `credit` | Decimal. `receive_window` defaults to 262144 |
 | `resuming` | `1` or `0`. Default `0` |
 | `session_id`, `kind`, `capabilities`, `params`, `message`, `data` | Hex, so invalid identifiers can be written. Omitted means empty |
 | `max_data_payload`, `max_control_payload` | Decimal limits for this vector. Omitted means default |
@@ -113,6 +113,7 @@ Each makes one session call. It must return OK, unless the step has
 | `eof` | `stream` | `send_eof` |
 | `reset` | `stream`, `code` | `reset_stream` |
 | `close` | `code` | `close` |
+| `consume` | `stream`, `bytes` | `consume` |
 
 Keep the message from `rx` alive until its events are taken (`docs/spec/BINDING.md` §1.4). Do not take
 events automatically after `rx`: the scenario decides, and some test `EVENTS_PENDING`.
@@ -142,10 +143,11 @@ scenario gives. Fields it leaves out are not compared.
 | `kind`, `session_id`, `peer_session_id` | Text |
 | `code`, `codec_status`, `state` | Names |
 | `resuming` | Boolean |
+| `receive_window`, `credit` | Numbers. In `rx`, `receive_window` defaults to 262144 |
 | `nonce` | Number. In `rx`, `"last"` means the nonce of the last `PING` the session sent |
 
 In `expect_streams`, each entry needs `stream_id`, and may give `kind`, `state`, `opener` (0 for
-client, 1 for server), `bytes_sent` and `bytes_received`.
+client, 1 for server), `bytes_sent`, `bytes_received` and `send_credit`.
 
 ## Params
 
@@ -210,7 +212,7 @@ To run one: create a `Server` and a memory network, and register `handlers` on b
 client. Run the steps. Then close everything, and fail if that takes more than a few seconds.
 
 `options` may hold `connect_timeout_ms`, `reconnect_backoff_ms`, `grace_period_ms`, `max_sessions`,
-`max_read_buffer`, and `session` for core settings. A scenario may set `authorize` to `refuse:<code>`,
+and `session` for core settings. A scenario may set `authorize` to `refuse:<code>`,
 or to `owner`: the first context owns the session, and any other is refused with `AUTH_REVOKED`.
 Every server has `on_session_closed` set. It checks that the session has left `sessions()` and records
 the code. A scenario may set `session_hook` to `raise`, and the callback then raises after recording.
@@ -244,7 +246,7 @@ stream: a client's name, or `server` for its first session.
 | `open_typed` | `kind`, `as`, `fields`, `value`, optional `expect_error` | `open_stream` with typed params |
 | `write` | `stream`, `data`, optional `background` | `write` |
 | `write_concurrently` | `stream`, `writes` | Starts every write at once, in order |
-| `eof` | `stream` | `send_eof` |
+| `eof` | `stream`, optional `background` | `send_eof` |
 | `reset` | `stream`, `code` | `reset` |
 | `close` | optional `client`, `code`, `background` | `close` |
 | `wait_accepted` | `stream` | `wait_accepted` |
@@ -284,6 +286,7 @@ stream: a client's name, or `server` for its first session.
 | `expect_connected` | | The client is connected now |
 | `expect_closed` | optional `error`, `code` | Waits for the client to close, with that error, or none |
 | `expect_read` | `stream`, `data` | Reads until that many bytes have arrived, and compares |
+| `expect_bytes` | `stream`, `count` | Reads until that many bytes have arrived, ignoring their value |
 | `expect_eof` | `stream` | The next read is the end of stream |
 | `expect_error` | `stream`, `call`, `error`, optional `code` | `read`, `write` or `wait_accepted` fails that way |
 | `expect_stream_closed` | `stream`, `code` | `wait_closed` gives that reason |

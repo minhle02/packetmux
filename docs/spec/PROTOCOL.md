@@ -51,7 +51,7 @@ The header is 5 bytes. There is no length field: one transport message is one fr
 
 | Value | Name | stream_id | Payload |
 |---|---|---|---|
-| 1 | `HELLO` | 0 | `version u16 \| resuming u8 \| session_id id16 \| capabilities bytes32` |
+| 1 | `HELLO` | 0 | `version u16 \| resuming u8 \| receive_window u32 \| session_id id16 \| capabilities bytes32` |
 | 2 | `OPEN` | ≠ 0 | `kind id16 \| params bytes32` |
 | 3 | `OPEN_OK` | ≠ 0 | empty |
 | 4 | `OPEN_ERR` | ≠ 0 | `code u8 \| message bytes32` |
@@ -61,12 +61,14 @@ The header is 5 bytes. There is no length field: one transport message is one fr
 | 8 | `PING` | 0 | `nonce u64` |
 | 9 | `PONG` | 0 | `nonce u64` |
 | 10 | `GOAWAY` | 0 | `code u8` |
+| 11 | `WINDOW` | ≠ 0 | `credit u32` |
 
 - Value 0 is never valid. Values are never renumbered, and new ones are only appended.
 - `HELLO`, `OPEN` and `OPEN_ERR` payloads are each at most `max_control_payload`.
 - **`HELLO.version` stays at payload offset 0 in every future protocol version.** A peer can then
   always read another version and reject it cleanly, even if the rest of the layout changes.
 - `HELLO.resuming` is 0 or 1 (§6.2).
+- `HELLO.receive_window` is at least 2, and `WINDOW.credit` is at least 1 (§8.1).
 - An empty `DATA` is invalid.
 
 ### 2.4 Reason codes
@@ -98,9 +100,9 @@ still valid. An encoder MUST refuse `TRANSPORT_LOST` and unknown values.
 
 ```
 HELLO    session "s1", new, no capabilities
-         01 00000000 | 0002 | 00 | 0002 7331 | 00000000
+         01 00000000 | 0002 | 00 | 00040000 | 0002 7331 | 00000000
 HELLO    session "s1", resuming
-         01 00000000 | 0002 | 01 | 0002 7331 | 00000000
+         01 00000000 | 0002 | 01 | 00040000 | 0002 7331 | 00000000
 OPEN     stream 1, kind "tcp-forward", params "{}"
          02 00000001 | 000b 7463702d666f7277617264 | 00000002 7b7d
 OPEN_OK  03 00000001
@@ -116,6 +118,8 @@ PING     nonce 1
 PONG     09 00000000 | 0000000000000001
 GOAWAY   AUTH_REVOKED
          0a 00000000 | 07
+WINDOW   stream 3, 128 KiB
+         0b 00000003 | 00020000
 ```
 
 ## 3. Decoding
@@ -133,6 +137,7 @@ an input with several faults always gives the same result.
 | 6 | Fields, left to right. `HELLO`: version is read first and must be 2 | `UNSUPPORTED_VERSION` |
 | 7 | A field or length prefix runs past the end | `TRUNCATED` |
 | 8 | `HELLO.resuming` is 0 or 1 | `BAD_FLAG` |
+| 9 | `HELLO.receive_window` is at least 2, and `WINDOW.credit` is at least 1 | `BAD_WINDOW` |
 | 9 | An `id16` is empty, or has a character outside §2.5 | `BAD_IDENTIFIER` |
 | 10 | Bytes are left after the last field | `BAD_PAYLOAD_SIZE` |
 
@@ -357,10 +362,10 @@ A session ID belongs to one session object. A peer that restarts needs a new ID.
 
 ## 8. Scheduling and queues
 
-- Control frames (`HELLO`, `OPEN`, `OPEN_OK`, `OPEN_ERR`, `RST`, `PING`, `PONG`, `GOAWAY`) go before
-  stream data, in the order they were queued.
+- Control frames (`HELLO`, `OPEN`, `OPEN_OK`, `OPEN_ERR`, `RST`, `PING`, `PONG`, `GOAWAY`, `WINDOW`) go
+  before stream data, in the order they were queued.
 - `DATA` and `EOF` use one queue per stream, so `EOF` never overtakes its data.
-- Streams with queued data are served round-robin, one frame per turn.
+- Streams with queued data and enough credit are served round-robin, one frame per turn.
 - Writes larger than `max_data_payload` are split.
 - Frames are pulled one at a time, so a host can stop while its transport is backed up.
 
@@ -371,10 +376,38 @@ another stream's queue is dropped.
 
 Control frames do not count towards these limits. They are bounded by `max_queued_control_frames`,
 checked after each inbound message. Going past it ends the connection with `LIMIT_EXCEEDED`. A
-configuration whose cap is not above 3 × `max_streams` is refused.
+configuration whose cap is not above 5 × `max_streams` is refused.
 
-There is no receive buffer in the session and no credit flow control. Inbound `DATA` goes to the host
-as it arrives.
+There is no receive buffer in the session. Inbound `DATA` goes to the host as it arrives, and credit
+bounds what the host can be holding.
+
+### 8.1 Flow control
+
+Each side announces `receive_window` in `HELLO`, for all its streams on that connection. It is fixed
+until the next `HELLO`.
+
+**Sending.** A stream starts with credit equal to the peer's `receive_window`. Each `DATA` frame spends
+its payload size. `EOF`, `RST` and control frames spend nothing. A stream whose next frame is larger
+than its credit waits, and takes no turns. `EOF` stays behind its data. `WINDOW` adds `credit`.
+
+`DATA` frames are at most half the peer's `receive_window`. A stream waiting for credit then has more
+than half a window in flight or held by the receiver, so a grant always follows once the consumer has
+read it.
+
+Until the peer's `HELLO` arrives a stream can be opened, but a write accepts nothing. The stream gets
+`WRITABLE` when the `HELLO` arrives.
+
+**Receiving.** The host reports what its consumer has taken. Once that reaches half of
+`receive_window`, the session sends all of it in one `WINDOW`. Bytes the host has not reported are never
+granted. No `WINDOW` is sent after the peer's `EOF`.
+
+**Errors.** `DATA` beyond the credit given, or `WINDOW` that takes credit above the peer's
+`receive_window`, is a connection error with `PROTOCOL_ERROR`. `WINDOW` is not a stream state input:
+it applies to a stream that still has data queued, including after a local close, and is otherwise
+ignored.
+
+A close does not wait for credit, as closing drops stream queues. Credit never crosses a reconnect,
+because streams end with the connection.
 
 ## 9. Limits and defaults
 
@@ -383,8 +416,9 @@ as it arrives.
 | `max_data_payload` | 16 000 B |
 | `max_control_payload` | 32 KiB |
 | `max_streams` | 64 |
-| `max_queued_bytes` | 1 MiB |
+| `max_queued_bytes` | 16 MiB |
 | `max_queued_bytes_per_stream` | 256 KiB |
+| `receive_window` | 256 KiB |
 | `max_queued_control_frames` | 1024 |
 | `hello_timeout` | 10 s |
 | `ping_interval` | 15 s |

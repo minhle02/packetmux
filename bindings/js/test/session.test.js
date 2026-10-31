@@ -19,6 +19,9 @@ class Peer {
   drain() {
     for (let event = this.session.pollEvent(); event !== null; event = this.session.pollEvent()) {
       this.events.push(event);
+      if (event.type === EventType.DATA) {
+        this.session.consume(event.streamId, event.data.length);
+      }
     }
   }
 
@@ -106,7 +109,10 @@ test('events own their bytes, even when WASM memory grows', () => {
   while (offset < big.length) {
     offset += client.session.write(streamId, big.subarray(offset), NOW_MS);
     transfer(client, server);
+    server.drain();
+    transfer(server, client);
   }
+  pump(client, server); // what was still waiting for credit
   const received = server.take().reduce((total, event) => total + event.data.length, 0);
   assert.equal(received, big.length);
   assert.equal(text(kept.data), 'one');

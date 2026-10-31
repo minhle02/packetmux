@@ -73,6 +73,8 @@ class StreamStateMachineTest : public ::testing::Test {
         m_stream({.streamId = STREAM_ID, .kind = "tcp-forward"},
                  STREAM_STATE_SENDER_OPENING, &m_processor) {
     m_processor.setNow(NOW_MS);
+    m_processor.setPeerReceiveWindow(DEFAULT_RECEIVE_WINDOW);
+    m_scheduler.openCredit(STREAM_ID, DEFAULT_RECEIVE_WINDOW);
   }
 
   StreamStep fire(const Input i_input) {
@@ -204,6 +206,7 @@ TEST_F(StreamStateMachineTest, ValidCellsHaveTheRightEffects) {
     SCOPED_TRACE("state " + std::to_string(effect.state) + " input " +
                  std::to_string(effect.input));
     m_scheduler.clear();
+    m_scheduler.openCredit(STREAM_ID, DEFAULT_RECEIVE_WINDOW);
     popEventTypes();
     m_stream.setState(effect.state);
     fire(effect.input);

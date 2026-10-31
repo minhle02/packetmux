@@ -126,10 +126,9 @@ export class SessionHost {
   #timer = null;
   #timerAt = 0;
 
-  constructor(mux, owner, { role, sessionId, capabilities, handlers, inflightLimit, maxReadBuffer, session }) {
+  constructor(mux, owner, { role, sessionId, capabilities, handlers, inflightLimit, session }) {
     this.owner = owner;
     this.inflightLimit = inflightLimit;
-    this.maxReadBuffer = maxReadBuffer;
     const settings = { ...mux.configDefaults(), ...session };
     this.maxWriteCall = settings.maxQueuedBytesPerStream;
     this.drainTimeoutMs = settings.drainTimeoutMs;
@@ -386,8 +385,10 @@ export class SessionHost {
     this.#call('resetStream', streamId, code);
   }
 
-  resetInDrain(streamId, code) {
-    this.#core.resetStream(streamId, code); // the drain in progress picks up its events
+  consume(streamId, count) {
+    if (this.#core !== null) {
+      this.#call('consume', streamId, count);
+    }
   }
 
   accept(stream) {

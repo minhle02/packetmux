@@ -32,6 +32,7 @@ class Config(Structure):
         ("dead_after_ms", c_uint64),
         ("drain_timeout_ms", c_uint64),
         ("max_outstanding_pings", c_size_t),
+        ("receive_window", c_uint32),
     ]
 
 
@@ -59,6 +60,7 @@ class StreamInfo(Structure):
         ("bytes_received", c_uint64),
         ("created_at_ms", c_uint64),
         ("last_activity_ms", c_uint64),
+        ("send_credit", c_uint64),
     ]
 
 
@@ -76,6 +78,8 @@ class Frame(Structure):
         ("message", Bytes),
         ("data", Bytes),
         ("nonce", c_uint64),
+        ("receive_window", c_uint32),
+        ("credit", c_uint32),
     ]
 
 
@@ -116,6 +120,7 @@ def _declare(library: ctypes.CDLL) -> None:
             status,
             [session, c_uint32, data, c_size_t, c_uint64, POINTER(c_size_t)],
         ),
+        "packetmux_session_consume": (status, [session, c_uint32, c_uint64]),
         "packetmux_session_send_eof": (status, [session, c_uint32]),
         "packetmux_session_reset_stream": (status, [session, c_uint32, c_uint8]),
         "packetmux_session_poll_transmit": (c_bool, [session, POINTER(Bytes)]),

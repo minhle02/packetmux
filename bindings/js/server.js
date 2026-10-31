@@ -8,7 +8,6 @@ const DEFAULTS = {
   gracePeriodMs: 120_000,
   maxSessions: 1024,
   inflightLimit: 64 * 1024,
-  maxReadBuffer: 16 * 1024 * 1024,
   session: {},
 };
 
@@ -27,7 +26,6 @@ export class ServerSession {
       capabilities,
       handlers,
       inflightLimit: options.inflightLimit,
-      maxReadBuffer: options.maxReadBuffer,
       session: options.session,
     });
   }

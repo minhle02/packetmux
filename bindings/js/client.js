@@ -18,7 +18,6 @@ const DEFAULTS = {
   connectTimeoutMs: 10_000,
   reconnectBackoffMs: [500, 1_000, 2_000, 4_000, 8_000], // the last value repeats
   inflightLimit: 64 * 1024,
-  maxReadBuffer: 16 * 1024 * 1024,
   session: {},
 };
 
@@ -162,7 +161,6 @@ export class Client {
       capabilities,
       handlers: handlerTable(handlers),
       inflightLimit: options.inflightLimit,
-      maxReadBuffer: options.maxReadBuffer,
       session: options.session,
     });
     this._state = new State(this);

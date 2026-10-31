@@ -9,7 +9,7 @@ namespace packetmux {
 namespace {
 
 // Each stream can queue at most OPEN or OPEN_OK or OPEN_ERR, plus RST.
-constexpr size_t MIN_CONTROL_FRAMES_PER_STREAM = 3U;
+constexpr size_t MIN_CONTROL_FRAMES_PER_STREAM = 5U;
 
 }  // namespace
 
@@ -38,7 +38,8 @@ bool SessionProcessor::validateConfig() const {
       m_config.limits.maxDataPayload > 0U &&
       m_config.limits.maxControlPayload > 0U && m_config.maxStreams > 0U &&
       m_config.maxQueuedBytes > 0U && m_config.maxQueuedBytesPerStream > 0U &&
-      m_config.maxOutstandingPings > 0U;
+      m_config.maxOutstandingPings > 0U &&
+      m_config.receiveWindow / 2U >= m_config.limits.maxDataPayload;
   const bool timesAreSet = m_config.helloTimeoutMs > 0U &&
                            m_config.pingIntervalMs > 0U &&
                            m_config.drainTimeoutMs > 0U &&
@@ -66,7 +67,8 @@ void SessionProcessor::queueHello() {
   queueControl({.type = FRAME_TYPE_HELLO,
                 .resuming = m_hasEstablished,
                 .sessionId = m_config.sessionId,
-                .capabilities = m_config.capabilities});
+                .capabilities = m_config.capabilities,
+                .receiveWindow = m_config.receiveWindow});
 }
 
 void SessionProcessor::queueGoaway(const ReasonCode i_code) {
@@ -99,6 +101,7 @@ void SessionProcessor::emitConnected(const FrameView& i_frame) {
   m_events.push({.type = EVENT_TYPE_CONNECTED,
                  .peerSessionId = i_frame.sessionId,
                  .capabilities = i_frame.capabilities});
+  m_streams.onPeerHello(i_frame.receiveWindow);
 }
 
 void SessionProcessor::emitDisconnected() {

@@ -59,6 +59,7 @@ function onEvent(event) {
       break;
     case EventType.DATA:
       received.push(event.data);
+      session.consume(event.streamId, event.data.length);
       break;
     case EventType.STREAM_CLOSED:
       result.streamCloseCode = event.code;

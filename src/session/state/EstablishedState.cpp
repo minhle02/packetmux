@@ -43,7 +43,9 @@ SessionStep EstablishedState::onMessage(
       }
       break;
     default:
-      m_processor->streams().onFrame(frame);
+      if (!m_processor->streams().onFrame(frame)) {
+        return failConnection(CODEC_STATUS_OK);
+      }
       break;
   }
 

@@ -222,9 +222,15 @@ TEST(SessionLifecycleTest, StreamOpenedDuringHandshakeGoesOutAfterHello) {
   SessionHarness harness;
   ASSERT_EQ(harness.attach(), OK);
   const uint32_t streamId = harness.open();
-  EXPECT_EQ(harness.write(streamId, Bytes{1U}), 1U);
+  EXPECT_EQ(harness.write(streamId, Bytes{1U}), 0U);  // no peer window yet
   EXPECT_EQ(typesOf(harness.takeFrames()),
-            (FrameTypes{FRAME_TYPE_HELLO, FRAME_TYPE_OPEN, FRAME_TYPE_DATA}));
+            (FrameTypes{FRAME_TYPE_HELLO, FRAME_TYPE_OPEN}));
+
+  ASSERT_EQ(harness.rx({.type = FRAME_TYPE_HELLO, .sessionId = "peer"}), OK);
+  EXPECT_EQ(typesOf(harness.takeEvents()),
+            (EventTypes{EVENT_TYPE_CONNECTED, EVENT_TYPE_WRITABLE}));
+  EXPECT_EQ(harness.write(streamId, Bytes{1U}), 1U);
+  EXPECT_EQ(typesOf(harness.takeFrames()), FrameTypes{FRAME_TYPE_DATA});
 }
 
 // --- T3: connection lost
@@ -353,7 +359,7 @@ TEST(SessionLifecycleTest, PongGivesTheRtt) {
 
 TEST(SessionLifecycleTest, ControlCapEndsTheConnection) {
   SessionConfig config = SessionHarness::configFor(ROLE_CLIENT);
-  config.maxQueuedControlFrames = DEFAULT_MAX_STREAMS * 3U + 1U;
+  config.maxQueuedControlFrames = DEFAULT_MAX_STREAMS * 5U + 1U;
   SessionHarness harness(config);
   harness.establish();
   for (size_t index = 0U; index < config.maxQueuedControlFrames; ++index) {
@@ -379,7 +385,8 @@ struct ProtocolErrorCase {
 };
 
 TEST(SessionLifecycleTest, ProtocolErrorsDrainThenDisconnect) {
-  const Bytes secondHello{0x01, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0x61, 0, 0, 0, 0};
+  const Bytes secondHello{0x01, 0, 0, 0, 0, 0, 2, 0,    0, 4,
+                          0,    0, 0, 1, 0x61, 0, 0, 0, 0};
   const Bytes wrongParity{0x02, 0, 0, 0, 1, 0, 1, 0x61, 0, 0, 0, 0};
   const Bytes dataFrame{0x05, 0, 0, 0, 1, 0x61};
   const Bytes wrongVersion{0x01, 0, 0, 0, 0, 0, 3};
@@ -637,7 +644,8 @@ TEST(SessionLifecycleTest, EventsMustBeDrainedBeforeTheNextMessage) {
   SessionHarness harness;
   ASSERT_EQ(harness.attach(), OK);
 
-  const Bytes hello{0x01, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0x61, 0, 0, 0, 0};
+  const Bytes hello{0x01, 0, 0, 0, 0, 0, 2, 0,    0, 4,
+                    0,    0, 0, 1, 0x61, 0, 0, 0, 0};
   const uint64_t nowMs = harness.nowMs();
   ASSERT_EQ(harness.session().onMessage(hello, nowMs), OK);
 

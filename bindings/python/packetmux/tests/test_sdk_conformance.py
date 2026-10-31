@@ -94,12 +94,10 @@ class Harness:
         self.client_options = ClientOptions(
             connect_timeout=options["connect_timeout_ms"] / 1000,
             reconnect_backoff=[ms / 1000 for ms in options["reconnect_backoff_ms"]],
-            max_read_buffer=options.get("max_read_buffer", 16 << 20),
         )
         server_options = ServerOptions(
             grace_period=options.get("grace_period_ms", 120_000) / 1000,
             max_sessions=options.get("max_sessions", 1024),
-            max_read_buffer=options.get("max_read_buffer", 16 << 20),
             session=options.get("session", {}),
         )
         self.handlers = [self._handler(kind, spec) for kind, spec in scenario["handlers"].items()]
@@ -269,6 +267,12 @@ async def do_expect_read(h: Harness, s: dict) -> None:
         assert chunk, "end of stream too early"
         received += chunk
     assert bytes(received) == expected
+
+
+async def do_expect_bytes(h: Harness, s: dict) -> None:
+    received = 0
+    while received < s["count"]:
+        received += len(await asyncio.wait_for(h.streams[s["stream"]].read(), TIMEOUT))
 
 
 async def do_expect_error(h: Harness, s: dict) -> None:
@@ -444,7 +448,9 @@ async def do_inject(h: Harness, s: dict) -> None:
 
 
 async def do_eof(h: Harness, s: dict) -> None:
-    await h.streams[s["stream"]].send_eof()
+    run = h.streams[s["stream"]].send_eof()
+    if not h.background(s, run):
+        await run
 
 
 async def do_reset(h: Harness, s: dict) -> None:
@@ -525,6 +531,7 @@ ASYNC_STEPS = {
     "drop": do_drop,
     "eof": do_eof,
     "inject": do_inject,
+    "expect_bytes": do_expect_bytes,
     "expect_closed": do_expect_closed,
     "expect_connected": do_expect_connected,
     "expect_dial_ids_match": do_expect_dial_ids,

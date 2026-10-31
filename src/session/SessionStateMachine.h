@@ -46,6 +46,7 @@ class SessionStateMachine {
   SessionStatus write(const uint32_t i_streamId,
                       const std::span<const uint8_t> i_bytes,
                       const uint64_t i_nowMs, size_t* const o_accepted);
+  SessionStatus consume(const uint32_t i_streamId, const uint64_t i_bytes);
   SessionStatus sendEof(const uint32_t i_streamId);
   SessionStatus resetStream(const uint32_t i_streamId, const ReasonCode i_code);
   SessionStatus close(const ReasonCode i_code, const uint64_t i_nowMs);

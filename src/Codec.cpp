@@ -20,6 +20,7 @@ constexpr size_t RESUMING_FIELD_SIZE = 1U;
 constexpr size_t ID_LENGTH_FIELD_SIZE = 2U;
 constexpr size_t OPAQUE_LENGTH_FIELD_SIZE = 4U;
 constexpr size_t REASON_FIELD_SIZE = 1U;
+constexpr size_t WINDOW_FIELD_SIZE = 4U;
 
 bool isConnectionFrame(const FrameType i_type) {
   return i_type == FRAME_TYPE_HELLO || i_type == FRAME_TYPE_PING ||
@@ -110,6 +111,12 @@ CodecStatus readHello(ByteReader* const o_reader, FrameView* const o_frame) {
     return CODEC_STATUS_BAD_FLAG;
   }
   o_frame->resuming = resuming == 1U;
+  if (!o_reader->readU32(&o_frame->receiveWindow)) {
+    return CODEC_STATUS_TRUNCATED;
+  }
+  if (o_frame->receiveWindow < MIN_RECEIVE_WINDOW) {
+    return CODEC_STATUS_BAD_WINDOW;
+  }
   const CodecStatus status = readIdentifier(o_reader, &o_frame->sessionId);
   if (status != CODEC_STATUS_OK) {
     return status;
@@ -147,6 +154,13 @@ CodecStatus readNonce(ByteReader* const o_reader, FrameView* const o_frame) {
                                             : CODEC_STATUS_TRUNCATED;
 }
 
+CodecStatus readWindow(ByteReader* const o_reader, FrameView* const o_frame) {
+  if (!o_reader->readU32(&o_frame->credit)) {
+    return CODEC_STATUS_TRUNCATED;
+  }
+  return o_frame->credit == 0U ? CODEC_STATUS_BAD_WINDOW : CODEC_STATUS_OK;
+}
+
 CodecStatus readPayload(ByteReader* const o_reader, FrameView* const o_frame) {
   switch (o_frame->type) {
     case FRAME_TYPE_HELLO:
@@ -165,6 +179,8 @@ CodecStatus readPayload(ByteReader* const o_reader, FrameView* const o_frame) {
     case FRAME_TYPE_PING:
     case FRAME_TYPE_PONG:
       return readNonce(o_reader, o_frame);
+    case FRAME_TYPE_WINDOW:
+      return readWindow(o_reader, o_frame);
     default:
       return CODEC_STATUS_OK;  // OPEN_OK, EOF: empty payload
   }
@@ -191,6 +207,9 @@ CodecStatus checkPayloadSize(const FrameType i_type, const size_t i_size,
     case FRAME_TYPE_PING:
     case FRAME_TYPE_PONG:
       validSize = (i_size == NONCE_PAYLOAD_SIZE);
+      break;
+    case FRAME_TYPE_WINDOW:
+      validSize = (i_size == WINDOW_FIELD_SIZE);
       break;
     case FRAME_TYPE_DATA:
       validSize = (i_size != 0U);
@@ -237,13 +256,16 @@ CodecStatus validateForEncode(const FrameView& i_frame,
       if (i_frame.version != PROTOCOL_VERSION) {
         return CODEC_STATUS_INVALID_ARGUMENT;
       }
+      if (i_frame.receiveWindow < MIN_RECEIVE_WINDOW) {
+        return CODEC_STATUS_INVALID_ARGUMENT;
+      }
       if (!isValidIdentifier(i_frame.sessionId)) {
         return CODEC_STATUS_BAD_IDENTIFIER;
       }
       if (!fitsOpaqueLength(i_frame.capabilities) ||
           !fitsControlPayload(
-              VERSION_FIELD_SIZE + RESUMING_FIELD_SIZE + ID_LENGTH_FIELD_SIZE +
-                  OPAQUE_LENGTH_FIELD_SIZE,
+              VERSION_FIELD_SIZE + RESUMING_FIELD_SIZE + WINDOW_FIELD_SIZE +
+                  ID_LENGTH_FIELD_SIZE + OPAQUE_LENGTH_FIELD_SIZE,
               {i_frame.sessionId.size(), i_frame.capabilities.size()},
               i_limits)) {
         return CODEC_STATUS_PAYLOAD_TOO_LARGE;
@@ -272,6 +294,9 @@ CodecStatus validateForEncode(const FrameView& i_frame,
       return CODEC_STATUS_OK;
     case FRAME_TYPE_DATA:
       return checkPayloadSize(i_frame.type, i_frame.data.size(), i_limits);
+    case FRAME_TYPE_WINDOW:
+      return i_frame.credit == 0U ? CODEC_STATUS_INVALID_ARGUMENT
+                                  : CODEC_STATUS_OK;
     case FRAME_TYPE_RST:
     case FRAME_TYPE_GOAWAY:
       return isSendableReason(i_frame.code) ? CODEC_STATUS_OK
@@ -303,6 +328,7 @@ void writePayload(const FrameView& i_frame, std::vector<uint8_t>* const o_out) {
     case FRAME_TYPE_HELLO:
       ByteWriter::appendU16(i_frame.version, o_out);
       ByteWriter::appendU8(i_frame.resuming ? 1U : 0U, o_out);
+      ByteWriter::appendU32(i_frame.receiveWindow, o_out);
       writeIdentifier(i_frame.sessionId, o_out);
       writeOpaque(i_frame.capabilities, o_out);
       break;
@@ -324,6 +350,9 @@ void writePayload(const FrameView& i_frame, std::vector<uint8_t>* const o_out) {
     case FRAME_TYPE_PING:
     case FRAME_TYPE_PONG:
       ByteWriter::appendU64(i_frame.nonce, o_out);
+      break;
+    case FRAME_TYPE_WINDOW:
+      ByteWriter::appendU32(i_frame.credit, o_out);
       break;
     default:
       break;  // OPEN_OK, EOF: empty payload

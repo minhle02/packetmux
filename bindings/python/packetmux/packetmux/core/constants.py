@@ -29,6 +29,7 @@ class CodecStatus(IntEnum):
     BAD_IDENTIFIER = 7
     INVALID_ARGUMENT = 8
     BAD_FLAG = 9
+    BAD_WINDOW = 10
 
 
 class Role(IntEnum):
@@ -63,6 +64,7 @@ class FrameType(IntEnum):
     PING = 8
     PONG = 9
     GOAWAY = 10
+    WINDOW = 11
 
 
 class EventType(IntEnum):

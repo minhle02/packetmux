@@ -26,6 +26,7 @@ enum FrameType : uint8_t {
   FRAME_TYPE_PING,
   FRAME_TYPE_PONG,
   FRAME_TYPE_GOAWAY,
+  FRAME_TYPE_WINDOW,
   FRAME_TYPE_MAX,
 };
 
@@ -57,6 +58,7 @@ enum CodecStatus : uint8_t {
   CODEC_STATUS_INVALID_ARGUMENT,  // encode only: e.g. a reason code that may
                                   // not be sent
   CODEC_STATUS_BAD_FLAG,
+  CODEC_STATUS_BAD_WINDOW,
   CODEC_STATUS_MAX,
 };
 
@@ -84,6 +86,8 @@ struct FrameView {
   std::span<const uint8_t> message;       // OPEN_ERR
   std::span<const uint8_t> data;          // DATA
   uint64_t nonce = 0U;                    // PING, PONG
+  uint32_t receiveWindow = DEFAULT_RECEIVE_WINDOW;  // HELLO
+  uint32_t credit = 0U;                             // WINDOW
 };
 
 }  // namespace packetmux

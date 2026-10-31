@@ -160,7 +160,6 @@ export interface ClientOptions {
   /** The last value repeats. */
   reconnectBackoffMs?: readonly number[];
   inflightLimit?: number;
-  maxReadBuffer?: number;
   /** Core settings: maxStreams, pingIntervalMs, ... */
   session?: Record<string, number>;
 }
@@ -223,7 +222,6 @@ export interface ServerOptions {
   gracePeriodMs?: number;
   maxSessions?: number;
   inflightLimit?: number;
-  maxReadBuffer?: number;
   session?: Record<string, number>;
 }
 

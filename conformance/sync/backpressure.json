@@ -55,18 +55,20 @@
       {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 10}, "expect_accepted": 10},
       {"op": "drain"}
     ]},
-    {"name": "a-control-flood-ends-the-connection", "requirement": "FR-BP-1b", "role": "client", "setup": "established", "config": {"max_queued_control_frames": 4, "max_streams": 1}, "steps": [
+    {"name": "a-control-flood-ends-the-connection", "requirement": "FR-BP-1b", "role": "client", "setup": "established", "config": {"max_queued_control_frames": 6, "max_streams": 1}, "steps": [
       {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
       {"op": "rx", "frame": {"type": "PING", "nonce": 2}},
       {"op": "rx", "frame": {"type": "PING", "nonce": 3}},
       {"op": "rx", "frame": {"type": "PING", "nonce": 4}},
-      {"op": "expect_state", "state": "ESTABLISHED"},
       {"op": "rx", "frame": {"type": "PING", "nonce": 5}},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 6}},
+      {"op": "expect_state", "state": "ESTABLISHED"},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 7}},
       {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "LIMIT_EXCEEDED"}]},
       {"op": "expect_state", "state": "DISCONNECTED"},
       {"op": "expect_frames", "frames": []}
     ]},
-    {"name": "a-small-control-cap-is-refused", "requirement": "FR-BP-1b", "role": "client", "config": {"max_queued_control_frames": 3, "max_streams": 1}, "steps": [
+    {"name": "a-small-control-cap-is-refused", "requirement": "FR-BP-1b", "role": "client", "config": {"max_queued_control_frames": 5, "max_streams": 1}, "steps": [
       {"op": "attach", "expect_status": "INVALID_ARGUMENT"},
       {"op": "expect_state", "state": "DISCONNECTED"}
     ]}

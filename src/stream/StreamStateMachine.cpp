@@ -32,12 +32,21 @@ StreamStep StreamStateMachine::onFrame(const FrameView& i_frame) {
     case FRAME_TYPE_DATA:
       return m_state->onData(context(), i_frame.data);
     case FRAME_TYPE_EOF:
+      m_record.remoteEof = true;
       return m_state->onEof(context());
     case FRAME_TYPE_RST:
       return m_state->onRst(context(), i_frame.code);
     default:
       return {.valid = false};  // connection frames never reach a stream
   }
+}
+
+bool StreamStateMachine::takePeerCredit(const size_t i_bytes) {
+  return m_processor->takePeerCredit(&m_record, i_bytes);
+}
+
+bool StreamStateMachine::consume(const uint64_t i_bytes) {
+  return m_processor->consume(&m_record, i_bytes);
 }
 
 StreamStep StreamStateMachine::onAccept() {
@@ -70,7 +79,8 @@ StreamInfo StreamStateMachine::info() const {
           .bytesSent = m_record.bytesSent,
           .bytesReceived = m_record.bytesReceived,
           .createdAtMs = m_record.createdAtMs,
-          .lastActivityMs = m_record.lastActivityMs};
+          .lastActivityMs = m_record.lastActivityMs,
+          .sendCredit = m_processor->sendCredit(m_record.streamId)};
 }
 
 const StreamStateBase* StreamStateMachine::stateFor(const StreamState i_state) {

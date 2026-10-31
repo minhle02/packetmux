@@ -16,8 +16,7 @@ class ServerOptions:
     grace_period: float = 120.0
     max_sessions: int = 1024
     inflight_limit: int = 64 * 1024
-    max_read_buffer: int = 16 * 1024 * 1024
-    session: Mapping[str, int] = field(default_factory=dict)  # core config: max_streams, ...
+    session: Mapping[str, int] = field(default_factory=dict)  # core config: receive_window, ...
 
 
 class ServerSession:
@@ -34,7 +33,6 @@ class ServerSession:
             server._capabilities,
             server._handlers,
             options.inflight_limit,
-            options.max_read_buffer,
             options.session,
         )
 

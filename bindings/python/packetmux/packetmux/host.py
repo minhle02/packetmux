@@ -140,14 +140,12 @@ class SessionHost:
         capabilities: bytes,
         handlers: Mapping[str, tuple[Handler, Optional[type]]],
         inflight_limit: int,
-        max_read_buffer: int,
         session_options: Mapping[str, int],
     ) -> None:
         self.owner = owner
         self.connection: Optional[Connection] = None
         self.connected = False
         self.inflight_limit = inflight_limit
-        self.max_read_buffer = max_read_buffer
         self.closed = asyncio.Event()
         defaults = {**core.config_defaults(), **session_options}
         self.max_write_call = defaults["max_queued_bytes_per_stream"]
@@ -359,8 +357,9 @@ class SessionHost:
     def reset(self, stream_id: int, code: Reason) -> None:
         self._call("reset_stream", stream_id, code)
 
-    def reset_in_drain(self, stream_id: int, code: Reason) -> None:
-        self._core.reset_stream(stream_id, code)  # the drain in progress picks up its events
+    def consume(self, stream_id: int, count: int) -> None:
+        if self._core is not None:
+            self._call("consume", stream_id, count)
 
     def accept(self, stream: Stream) -> None:
         if not stream.is_closed:

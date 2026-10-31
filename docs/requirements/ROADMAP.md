@@ -52,18 +52,4 @@ Purpose: let latency-sensitive streams (scrcpy, live logcat) go ahead of bulk tr
 - A consumer only states which priority a stream needs. All scheduling stays in the core
   (INTENT.md FR-SDK-9).
 - Works only while the host keeps its transport buffer shallow, by pulling frames on demand
-  (FR-SCH-5). Without credit flow control (§4), a slow consumer on the receiving side still delays
-  all streams.
-
-## 4. Credit-based flow control
-
-Purpose: a slow consumer slows only its own stream, not the whole connection (INTENT.md §8).
-
-Scheduled as M11, and goes into v2 while v2 is unreleased (IMPROVEMENTS.md §3).
-
-- A `WINDOW` frame, which the receiver uses to grant send credit per stream, as in the RemoteDevice
-  v1 protocol (§5.3 there).
-- The receiver returns credit only after its consumer has taken the data. This brings back a
-  bounded receive buffer per stream (it replaces FR-BP-3). The SDK already has that buffer, and
-  already knows what the consumer took (FR-AST-5, FR-AST-7), so the credit logic can stay in the
-  core and the consumer API does not change.
+  (FR-SCH-5).

@@ -125,10 +125,6 @@ export class Stream {
     this.#readBuffer.push(chunk);
     this.#readBytes += chunk.length;
     this.readHighWater = Math.max(this.readHighWater, this.#readBytes);
-    if (this.#readBytes > this.#host.maxReadBuffer) {
-      this.#host.resetInDrain(this.id, Reason.LIMIT_EXCEEDED); // STREAM_CLOSED follows
-      return;
-    }
     this.#readable.set();
   }
 
@@ -163,6 +159,7 @@ export class Stream {
   #take() {
     const chunk = this.#readBuffer.shift();
     this.#readBytes -= chunk.length;
+    this.#host.consume(this.id, chunk.length);
     return chunk;
   }
 

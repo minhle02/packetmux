@@ -19,6 +19,9 @@ struct StreamRecord {
   uint64_t bytesReceived = 0U;
   uint64_t createdAtMs = 0U;
   uint64_t lastActivityMs = 0U;
+  uint64_t peerCredit = 0U;  // what the peer may still send
+  uint64_t consumed = 0U;    // taken by the consumer, not yet granted back
+  bool remoteEof = false;    // nothing more can arrive, so grants are pointless
 };
 
 }  // namespace packetmux

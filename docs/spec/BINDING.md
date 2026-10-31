@@ -105,6 +105,7 @@ behalf, which is why almost every consumer should use it.
 | Ignore anything a replaced connection reports | An old transport can still deliver a message or its close |
 | Stop a replaced connection's send loop before it takes another frame | Otherwise it takes the new connection's frames, and they are lost on the old transport |
 | Do not call the session for a stream that has closed | It returns `UNKNOWN_STREAM` |
+| Call `consume` for `DATA` the consumer has taken | Otherwise the stream stalls after one `receive_window` |
 | Pull frames only while the transport has room | Queueing stays in the session, which keeps order and fairness |
 | Set one timer for `next_deadline_ms` | It changes after every call |
 
@@ -226,7 +227,8 @@ finishes and while disconnected, and it is never a replaced Transport.
 
 - **Reading** returns the next chunk, or a distinct end-of-stream value once the peer has half-closed
   and everything has been read. A reset fails the next read, even with data still buffered.
-- **The read buffer** is bounded by `max_read_buffer`. Past it, reset that stream with `LIMIT_EXCEEDED`.
+- **The read buffer** is bounded by credit. Report each chunk to `consume` when the consumer takes it,
+  from one path. Not when it arrives, or a slow reader is no longer limited.
 - **Writing** waits until every byte is queued, across `WRITABLE` events. Concurrent writes on one
   stream run in order, and do not interleave. Clear the writable signal **before** the core call, or
   its `WRITABLE` is lost. Hand the core at most `max_queued_bytes_per_stream` per call.

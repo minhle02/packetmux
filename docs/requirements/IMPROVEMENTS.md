@@ -1,6 +1,6 @@
 # PacketMux — Improvement roadmap
 
-Status: approved triage. M9 is done, apart from its removal check. Source: the RemoteDevice integration report of 2026-10-31,
+Status: approved triage. M9, M10 and M11 are done, apart from the removal checks of M9 and M11. Source: the RemoteDevice integration report of 2026-10-31,
 on PacketMux `b8ce10a` and RemoteDevice `packetmux-integration` at `63c9be0`. Numbers in the first
 column below are the report's request numbers.
 
@@ -82,8 +82,9 @@ To settle in the design note:
 
 1. How a receiver announces its window. The two sides may be configured differently, so one side
    cannot assume the other's value.
-2. The default window, from M10.
-3. When to send a grant, so that small reads do not produce one frame each.
+2. The default window. M10 proposes 256 KiB, configurable (`docs/design/M10_MEASUREMENTS.md`).
+3. When to send a grant, so that small reads do not produce one frame each, without the two sides
+   deadlocking (M10).
 4. What counts against credit. The starting point is `DATA` payload only, so `EOF`, `RST` and control
    frames always pass.
 5. A peer that sends past its credit: a connection error, like other protocol violations.

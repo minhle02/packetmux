@@ -46,6 +46,7 @@ const std::map<std::string, CodecStatus> CODEC_NAMES{
     {"TRUNCATED", CODEC_STATUS_TRUNCATED},
     {"UNSUPPORTED_VERSION", CODEC_STATUS_UNSUPPORTED_VERSION},
     {"BAD_FLAG", CODEC_STATUS_BAD_FLAG},
+    {"BAD_WINDOW", CODEC_STATUS_BAD_WINDOW},
 };
 
 const std::map<std::string, ReasonCode> REASON_NAMES{
@@ -69,6 +70,7 @@ const std::map<std::string, FrameType> FRAME_NAMES{
     {"DATA", FRAME_TYPE_DATA},       {"EOF", FRAME_TYPE_EOF},
     {"RST", FRAME_TYPE_RST},         {"PING", FRAME_TYPE_PING},
     {"PONG", FRAME_TYPE_PONG},       {"GOAWAY", FRAME_TYPE_GOAWAY},
+    {"WINDOW", FRAME_TYPE_WINDOW},
 };
 
 const std::map<std::string, EventType> EVENT_NAMES{
@@ -198,6 +200,7 @@ class Harness {
     config.limits.maxDataPayload =
         fields.value("max_data_payload", config.limits.maxDataPayload);
     config.maxStreams = fields.value("max_streams", config.maxStreams);
+    config.receiveWindow = fields.value("receive_window", config.receiveWindow);
     config.maxQueuedBytes =
         fields.value("max_queued_bytes", config.maxQueuedBytes);
     config.maxQueuedBytesPerStream = fields.value(
@@ -246,6 +249,8 @@ class Harness {
           .message = text,
           .data = data,
           .nonce = nonce.is_string() ? m_lastPing : nonce.get<uint64_t>(),
+          .receiveWindow = fields.value("receive_window", DEFAULT_RECEIVE_WINDOW),
+          .credit = fields.value("credit", 0U),
       };
       ASSERT_EQ(Codec::encode(frame, FrameLimits{}, &message), CODEC_STATUS_OK);
     }
@@ -297,6 +302,13 @@ class Harness {
           }
           if (fields.contains("resuming")) {
             EXPECT_EQ(frame.resuming, fields.at("resuming").get<bool>());
+          }
+          if (fields.contains("receive_window")) {
+            EXPECT_EQ(frame.receiveWindow,
+                      fields.at("receive_window").get<uint32_t>());
+          }
+          if (fields.contains("credit")) {
+            EXPECT_EQ(frame.credit, fields.at("credit").get<uint32_t>());
           }
           if (fields.contains("nonce")) {
             EXPECT_EQ(frame.nonce, fields.at("nonce").get<uint64_t>());
@@ -382,6 +394,8 @@ class Harness {
       }
       EXPECT_EQ(actual[index].bytesSent,
                 fields.value("bytes_sent", actual[index].bytesSent));
+      EXPECT_EQ(actual[index].sendCredit,
+                fields.value("send_credit", actual[index].sendCredit));
       EXPECT_EQ(actual[index].bytesReceived,
                 fields.value("bytes_received", actual[index].bytesReceived));
     }
@@ -410,6 +424,11 @@ class Harness {
        }},
       {"write", [this] { write(); }},
       {"eof", [this] { check(m_session.sendEof(step().at("stream"))); }},
+      {"consume",
+       [this] {
+         check(m_session.consume(step().at("stream"),
+                                 step().at("bytes").get<uint64_t>()));
+       }},
       {"reset",
        [this] {
          check(m_session.resetStream(step().at("stream"),

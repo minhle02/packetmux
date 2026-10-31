@@ -122,7 +122,6 @@ await client.close()
 |---|---|---|
 | `connectTimeoutMs` | 10 000 | Limit for one dial, for the first `connect`, and for `openStream` to wait for a connection |
 | `reconnectBackoffMs` | 500, 1000, 2000, 4000, 8000 | Delay between attempts. The last value repeats |
-| `maxReadBuffer` | 16 MiB | See [Reading](#reading) |
 | `inflightLimit` | 64 KiB | How much to keep in the Transport's buffer |
 | `session` | `{}` | Core settings, such as `maxStreams` or `pingIntervalMs`. See [Core settings](#core-settings) |
 | `handlers` | None | For streams the server opens. See [Handlers](#handlers) |
@@ -207,8 +206,9 @@ can write at once, and to wait for the peer, call `await stream.waitAccepted()`.
 `await stream.read()` resolves with the next chunk, or `null` once the peer has half-closed and everything
 has been read. A reset rejects the next read with `StreamReset`, even with data still buffered.
 
-Keep reading. There is no flow control per stream yet, so if a stream falls `maxReadBuffer` behind, it is
-reset with `LIMIT_EXCEEDED`. Other streams are not affected.
+A stream that is not read stalls on its own: the peer stops after one receive window, 256 KiB by default,
+and other streams carry on. On a stream whose peer replies to what you write, such as an echo, read while
+you write. If you only read after a large write has finished, both sides wait for each other.
 
 ### Writing
 
@@ -256,7 +256,7 @@ sockets.on('connection', (socket) => { // however your server calls you
 | `gracePeriodMs` | 120 000 | How long a disconnected session waits for its client |
 | `maxSessions` | 1024 | New sessions over this are refused with `LIMIT_EXCEEDED` |
 | `handlers`, `authorize`, `capabilities` | | See below |
-| `maxReadBuffer`, `inflightLimit`, `session` | As for the client | |
+| `inflightLimit`, `session` | As for the client | |
 
 ### Handlers
 
@@ -431,8 +431,9 @@ Stream kinds may only contain `a-z`, `A-Z`, `0-9` and `-`.
 | Setting | Default |
 |---|---|
 | `maxStreams` | 64 |
-| `maxQueuedBytes` | 1 MiB |
+| `maxQueuedBytes` | 16 MiB |
 | `maxQueuedBytesPerStream` | 256 KiB |
+| `receiveWindow` | 256 KiB. What the peer may send per stream before you read it. A stream is capped at this ÷ round trip, so raise it for long paths |
 | `helloTimeoutMs` | 10 000 |
 | `pingIntervalMs` | 15 000 |
 | `deadAfterMs` | 45 000 |

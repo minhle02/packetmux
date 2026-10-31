@@ -52,6 +52,7 @@ PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_BAD_IDENTIFIER,
 PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_INVALID_ARGUMENT,
                      CODEC_STATUS_INVALID_ARGUMENT);
 PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_BAD_FLAG, CODEC_STATUS_BAD_FLAG);
+PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_BAD_WINDOW, CODEC_STATUS_BAD_WINDOW);
 PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_MAX, CODEC_STATUS_MAX);
 
 PACKETMUX_SAME_VALUE(PACKETMUX_ROLE_CLIENT, ROLE_CLIENT);
@@ -89,6 +90,7 @@ PACKETMUX_SAME_VALUE(PACKETMUX_FRAME_TYPE_RST, FRAME_TYPE_RST);
 PACKETMUX_SAME_VALUE(PACKETMUX_FRAME_TYPE_PING, FRAME_TYPE_PING);
 PACKETMUX_SAME_VALUE(PACKETMUX_FRAME_TYPE_PONG, FRAME_TYPE_PONG);
 PACKETMUX_SAME_VALUE(PACKETMUX_FRAME_TYPE_GOAWAY, FRAME_TYPE_GOAWAY);
+PACKETMUX_SAME_VALUE(PACKETMUX_FRAME_TYPE_WINDOW, FRAME_TYPE_WINDOW);
 PACKETMUX_SAME_VALUE(PACKETMUX_FRAME_TYPE_MAX, FRAME_TYPE_MAX);
 
 PACKETMUX_SAME_VALUE(PACKETMUX_EVENT_TYPE_UNKNOWN, EVENT_TYPE_UNKNOWN);
@@ -192,7 +194,8 @@ SessionConfig toConfig(const packetmux_config_t& i_config) {
           .pingIntervalMs = i_config.ping_interval_ms,
           .deadAfterMs = i_config.dead_after_ms,
           .drainTimeoutMs = i_config.drain_timeout_ms,
-          .maxOutstandingPings = i_config.max_outstanding_pings};
+          .maxOutstandingPings = i_config.max_outstanding_pings,
+          .receiveWindow = i_config.receive_window};
 }
 
 packetmux_event_t toEvent(const Event& i_event) {
@@ -215,7 +218,8 @@ packetmux_stream_info_t toStreamInfo(const StreamInfo& i_info) {
           .bytes_sent = i_info.bytesSent,
           .bytes_received = i_info.bytesReceived,
           .created_at_ms = i_info.createdAtMs,
-          .last_activity_ms = i_info.lastActivityMs};
+          .last_activity_ms = i_info.lastActivityMs,
+          .send_credit = i_info.sendCredit};
 }
 
 packetmux_frame_t toFrame(const FrameView& i_frame) {
@@ -230,7 +234,9 @@ packetmux_frame_t toFrame(const FrameView& i_frame) {
           .code = i_frame.code,
           .message = toBytes(i_frame.message),
           .data = toBytes(i_frame.data),
-          .nonce = i_frame.nonce};
+          .nonce = i_frame.nonce,
+          .receive_window = i_frame.receiveWindow,
+          .credit = i_frame.credit};
 }
 
 FrameView toFrameView(const packetmux_frame_t& i_frame) {
@@ -245,7 +251,9 @@ FrameView toFrameView(const packetmux_frame_t& i_frame) {
           .code = static_cast<ReasonCode>(i_frame.code),
           .message = toSpan(i_frame.message),
           .data = toSpan(i_frame.data),
-          .nonce = i_frame.nonce};
+          .nonce = i_frame.nonce,
+          .receiveWindow = i_frame.receive_window,
+          .credit = i_frame.credit};
 }
 
 }  // namespace
@@ -279,7 +287,8 @@ void packetmux_config_init(packetmux_config_t* const o_config) noexcept {
       .ping_interval_ms = defaults.pingIntervalMs,
       .dead_after_ms = defaults.deadAfterMs,
       .drain_timeout_ms = defaults.drainTimeoutMs,
-      .max_outstanding_pings = defaults.maxOutstandingPings};
+      .max_outstanding_pings = defaults.maxOutstandingPings,
+      .receive_window = defaults.receiveWindow};
 }
 
 packetmux_session_t* packetmux_session_create(
@@ -354,6 +363,12 @@ packetmux_status_t packetmux_session_write(packetmux_session_t* const i_session,
                                            size_t* const o_accepted) noexcept {
   return i_session->session.write(i_stream_id, toSpan(i_bytes, i_size),
                                   i_now_ms, o_accepted);
+}
+
+packetmux_status_t packetmux_session_consume(
+    packetmux_session_t* const i_session, const uint32_t i_stream_id,
+    const uint64_t i_bytes) noexcept {
+  return i_session->session.consume(i_stream_id, i_bytes);
 }
 
 packetmux_status_t packetmux_session_send_eof(

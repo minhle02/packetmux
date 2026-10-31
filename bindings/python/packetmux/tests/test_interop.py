@@ -64,6 +64,7 @@ class Server:
             self._reply_size = int(event.params)
         elif event.type == EventType.DATA:
             self.received += event.data
+            session.consume(event.stream_id, len(event.data))
         elif event.type == EventType.EOF:
             self._reply = pattern_of(self._reply_size, 17)
         elif event.type == EventType.STREAM_CLOSED:

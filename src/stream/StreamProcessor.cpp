@@ -20,6 +20,7 @@ StreamProcessor::StreamProcessor(const SessionConfig& i_config,
     : m_config(i_config),
       m_scheduler(o_scheduler),
       m_events(o_events),
+      m_peerReceiveWindow(0U),
       m_nowMs(0U) {}
 
 void StreamProcessor::setNow(const uint64_t i_nowMs) { m_nowMs = i_nowMs; }
@@ -33,9 +34,12 @@ void StreamProcessor::write(StreamRecord* const o_record,
   const size_t room = std::min(i_bytes.size(), roomFor(streamId));
 
   size_t offset = 0U;
+  // At most half the peer's window: a parked stream then always has at least
+  // that much with the receiver, which is enough to trigger a grant.
+  const size_t maxChunk = std::min<size_t>(m_config.limits.maxDataPayload,
+                                           m_peerReceiveWindow / 2U);
   while (offset < room) {
-    const size_t chunkSize =
-        std::min(room - offset, m_config.limits.maxDataPayload);
+    const size_t chunkSize = std::min(room - offset, maxChunk);
     std::vector<uint8_t> message;
     Codec::encode({.type = FRAME_TYPE_DATA,
                    .streamId = streamId,
@@ -75,6 +79,55 @@ void StreamProcessor::emitOpened(const FrameView& i_frame) {
 
 void StreamProcessor::emitAccepted(const uint32_t i_streamId) {
   m_events->push({.type = EVENT_TYPE_STREAM_ACCEPTED, .streamId = i_streamId});
+}
+
+void StreamProcessor::setPeerReceiveWindow(const uint32_t i_window) {
+  m_peerReceiveWindow = i_window;
+}
+
+void StreamProcessor::openCredit(const uint32_t i_streamId) {
+  m_scheduler->openCredit(i_streamId, m_peerReceiveWindow);
+}
+
+void StreamProcessor::retireCredit(const uint32_t i_streamId) {
+  m_scheduler->retireCredit(i_streamId);
+}
+
+bool StreamProcessor::takePeerCredit(StreamRecord* const o_record,
+                                     const size_t i_bytes) {
+  if (i_bytes > o_record->peerCredit) {
+    return false;
+  }
+  o_record->peerCredit -= i_bytes;
+  return true;
+}
+
+bool StreamProcessor::onWindow(const uint32_t i_streamId,
+                               const uint32_t i_credit) {
+  return m_scheduler->addCredit(i_streamId, i_credit, m_peerReceiveWindow);
+}
+
+bool StreamProcessor::consume(StreamRecord* const o_record,
+                              const uint64_t i_bytes) {
+  const uint64_t held =
+      m_config.receiveWindow - o_record->peerCredit - o_record->consumed;
+  if (i_bytes > held) {
+    return false;
+  }
+  o_record->consumed += i_bytes;
+  if (o_record->consumed >= m_config.receiveWindow / 2U &&
+      !o_record->remoteEof) {
+    queueControl({.type = FRAME_TYPE_WINDOW,
+                  .streamId = o_record->streamId,
+                  .credit = static_cast<uint32_t>(o_record->consumed)});
+    o_record->peerCredit += o_record->consumed;
+    o_record->consumed = 0U;
+  }
+  return true;
+}
+
+uint64_t StreamProcessor::sendCredit(const uint32_t i_streamId) const {
+  return m_scheduler->credit(i_streamId);
 }
 
 void StreamProcessor::emitEof(const uint32_t i_streamId) {
@@ -155,6 +208,9 @@ ReasonCode StreamProcessor::reasonForStreams(const ReasonCode i_code) {
 }
 
 size_t StreamProcessor::roomFor(const uint32_t i_streamId) const {
+  if (m_peerReceiveWindow == 0U) {
+    return 0U;  // frames are cut to fit the peer's window, not known yet
+  }
   return std::min(
       spaceLeft(m_config.maxQueuedBytesPerStream,
                 m_scheduler->queuedBytes(i_streamId)),

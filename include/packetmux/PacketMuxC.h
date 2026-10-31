@@ -66,6 +66,7 @@ enum {
   PACKETMUX_CODEC_STATUS_BAD_IDENTIFIER,
   PACKETMUX_CODEC_STATUS_INVALID_ARGUMENT,
   PACKETMUX_CODEC_STATUS_BAD_FLAG,
+  PACKETMUX_CODEC_STATUS_BAD_WINDOW,
   PACKETMUX_CODEC_STATUS_MAX
 };
 
@@ -99,6 +100,7 @@ enum {
   PACKETMUX_FRAME_TYPE_PING,
   PACKETMUX_FRAME_TYPE_PONG,
   PACKETMUX_FRAME_TYPE_GOAWAY,
+  PACKETMUX_FRAME_TYPE_WINDOW,
   PACKETMUX_FRAME_TYPE_MAX
 };
 
@@ -165,6 +167,7 @@ typedef struct {
   uint64_t dead_after_ms;
   uint64_t drain_timeout_ms;
   size_t max_outstanding_pings;
+  uint32_t receive_window;
 } packetmux_config_t;
 
 typedef struct {
@@ -188,6 +191,7 @@ typedef struct {
   uint64_t bytes_received;
   uint64_t created_at_ms;
   uint64_t last_activity_ms;
+  uint64_t send_credit;
 } packetmux_stream_info_t;
 
 typedef struct {
@@ -203,6 +207,8 @@ typedef struct {
   packetmux_bytes_t message;
   packetmux_bytes_t data;
   uint64_t nonce;
+  uint32_t receive_window;
+  uint32_t credit;
 } packetmux_frame_t;
 
 typedef struct packetmux_session packetmux_session_t; /* opaque */
@@ -247,6 +253,9 @@ PACKETMUX_API packetmux_status_t packetmux_session_write(
     packetmux_session_t* i_session, uint32_t i_stream_id,
     const uint8_t* i_bytes, size_t i_size, uint64_t i_now_ms,
     size_t* o_accepted) PACKETMUX_NOEXCEPT;
+PACKETMUX_API packetmux_status_t packetmux_session_consume(
+    packetmux_session_t* i_session, uint32_t i_stream_id,
+    uint64_t i_bytes) PACKETMUX_NOEXCEPT;
 PACKETMUX_API packetmux_status_t packetmux_session_send_eof(
     packetmux_session_t* i_session, uint32_t i_stream_id) PACKETMUX_NOEXCEPT;
 PACKETMUX_API packetmux_status_t packetmux_session_reset_stream(

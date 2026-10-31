@@ -9,6 +9,8 @@ from packetmux.core import CodecError, CodecStatus, Frame, FrameType, Reason, de
 VECTORS = Path(__file__).resolve().parents[4] / "conformance/vectors/frames.txt"
 DEFAULT_LIMITS = {"max_data_payload": 16000, "max_control_payload": 32 * 1024}
 
+DEFAULT_RECEIVE_WINDOW = 262144
+
 
 def load_vectors() -> list[tuple[str, dict[str, str]]]:
     vectors: list[tuple[str, dict[str, str]]] = []
@@ -64,6 +66,8 @@ def test_vector(fields: dict[str, str]) -> None:
         message=hex_field(fields, "message"),
         data=hex_field(fields, "data"),
         nonce=int(fields.get("nonce", "0")),
+        receive_window=int(fields.get("receive_window", DEFAULT_RECEIVE_WINDOW)),
+        credit=int(fields.get("credit", "0")),
     )
     assert decode_frame(wire, **limits) == expected
     if fields.get("roundtrip", "true") == "true":

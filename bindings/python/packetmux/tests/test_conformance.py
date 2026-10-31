@@ -20,6 +20,7 @@ from packetmux.core import (
     encode_frame,
 )
 
+DEFAULT_RECEIVE_WINDOW = 256 * 1024
 CONFORMANCE = Path(__file__).resolve().parents[4] / "conformance"
 MANIFEST = json.loads((CONFORMANCE / "manifest.json").read_text())
 SETUPS = json.loads((CONFORMANCE / "sync/setups.json").read_text())
@@ -72,6 +73,8 @@ class Harness:
                 type=FrameType[fields["type"]],
                 stream_id=fields.get("stream_id", 0),
                 resuming=fields.get("resuming", False),
+                receive_window=fields.get("receive_window", DEFAULT_RECEIVE_WINDOW),
+                credit=fields.get("credit", 0),
                 session_id=fields.get("session_id", ""),
                 capabilities=bytes.fromhex(fields.get("capabilities", "")),
                 kind=fields.get("kind", ""),
@@ -150,6 +153,7 @@ STEPS = {
     ),
     "write": do_write,
     "eof": lambda h, s: h.call(s, "send_eof", s["stream"]),
+    "consume": lambda h, s: h.call(s, "consume", s["stream"], s["bytes"]),
     "reset": lambda h, s: h.call(s, "reset_stream", s["stream"], Reason[s["code"]]),
     "close": lambda h, s: h.call(s, "close", Reason[s["code"]], h.now_ms),
     "drain": lambda h, s: (h.frames(), h.events()),

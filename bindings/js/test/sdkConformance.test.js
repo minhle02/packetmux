@@ -95,7 +95,6 @@ class Harness {
     this.clientOptions = {
       connectTimeoutMs: options.connect_timeout_ms,
       reconnectBackoffMs: options.reconnect_backoff_ms,
-      maxReadBuffer: options.max_read_buffer ?? 16 << 20,
     };
     const session = {};
     if (options.session?.hello_timeout_ms !== undefined) {
@@ -113,7 +112,6 @@ class Harness {
       },
       gracePeriodMs: options.grace_period_ms ?? 120_000,
       maxSessions: options.max_sessions ?? 1024,
-      maxReadBuffer: options.max_read_buffer ?? 16 << 20,
       session,
     });
     this.network = new MemoryNetwork(this.server);
@@ -319,7 +317,17 @@ const asyncSteps = {
   async dial_works(h) { h.network.hang(false); },
   async drop(h, s) { h.transportOf({ side: 'client', ...s }).failLocally(); },
   async inject(h, s) { h.transportOf(s).handleMessage(fromHex(s.wire)); },
-  async eof(h, s) { await h.streams.get(s.stream).sendEof(); },
+  async eof(h, s) {
+    const ending = h.streams.get(s.stream).sendEof();
+    if (!h.background(s, ending)) {
+      await ending;
+    }
+  },
+  async expect_bytes(h, s) {
+    for (let received = 0; received < s.count;) {
+      received += (await timed(h.streams.get(s.stream).read())).length;
+    }
+  },
   async expect_closed(h, s) {
     const client = h.client(s);
     await timed(client.waitClosed());

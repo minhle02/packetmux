@@ -118,7 +118,6 @@ streams the server opens, and `capabilities`, opaque bytes for the peer's `autho
 |---|---|---|
 | `connect_timeout` | 10 s | Limit for one dial, for the first `connect`, and for `open_stream` to wait for a connection |
 | `reconnect_backoff` | 0.5, 1, 2, 4, 8 s | Delay between attempts. The last value repeats |
-| `max_read_buffer` | 16 MiB | See [Reading](#reading) |
 | `inflight_limit` | 64 KiB | How much to keep in the Transport's buffer |
 | `session` | `{}` | Core settings, such as `max_streams` or `ping_interval_ms`. See [Core settings](#core-settings) |
 
@@ -197,8 +196,9 @@ write at once, and to wait for the peer, call `await stream.wait_accepted()`.
 `await stream.read()` returns the next chunk, or `b""` once the peer has half-closed and everything has
 been read. A reset raises `StreamReset` on the next read, even with data still buffered.
 
-Keep reading. There is no flow control per stream yet, so if a stream falls `max_read_buffer` behind, it
-is reset with `LIMIT_EXCEEDED`. Other streams are not affected.
+A stream that is not read stalls on its own: the peer stops after one receive window, 256 KiB by default,
+and other streams carry on. On a stream whose peer replies to what you write, such as an echo, read while
+you write. If you only read after a large write has finished, both sides wait for each other.
 
 ### Writing
 
@@ -244,7 +244,7 @@ async def on_websocket(socket) -> None:            # however your web framework 
 |---|---|---|
 | `grace_period` | 120 s | How long a disconnected session waits for its client |
 | `max_sessions` | 1024 | New sessions over this are refused with `LIMIT_EXCEEDED` |
-| `max_read_buffer`, `inflight_limit`, `session` | As for the client | |
+| `inflight_limit`, `session` | As for the client | |
 
 ### Handlers
 
@@ -417,8 +417,9 @@ Stream kinds may only contain `a-z`, `A-Z`, `0-9` and `-`.
 | Setting | Default |
 |---|---|
 | `max_streams` | 64 |
-| `max_queued_bytes` | 1 MiB |
+| `max_queued_bytes` | 16 MiB |
 | `max_queued_bytes_per_stream` | 256 KiB |
+| `receive_window` | 256 KiB. What the peer may send per stream before you read it. A stream is capped at this ÷ round trip, so raise it for long paths |
 | `hello_timeout_ms` | 10 000 |
 | `ping_interval_ms` | 15 000 |
 | `dead_after_ms` | 45 000 |

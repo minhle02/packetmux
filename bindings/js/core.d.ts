@@ -3,12 +3,12 @@ export type EnumOf<T extends string> = Readonly<Record<T, number>>;
 export const Status: EnumOf<'OK' | 'CLOSED' | 'NOT_CONNECTED' | 'ALREADY_CONNECTED' | 'EVENTS_PENDING' |
   'UNKNOWN_STREAM' | 'INVALID_STATE' | 'LIMIT_EXCEEDED' | 'IDS_EXHAUSTED' | 'INVALID_ARGUMENT'>;
 export const CodecStatus: EnumOf<'OK' | 'TRUNCATED' | 'UNKNOWN_TYPE' | 'BAD_STREAM_ID' | 'PAYLOAD_TOO_LARGE' |
-  'BAD_PAYLOAD_SIZE' | 'UNSUPPORTED_VERSION' | 'BAD_IDENTIFIER' | 'INVALID_ARGUMENT' | 'BAD_FLAG'>;
+  'BAD_PAYLOAD_SIZE' | 'UNSUPPORTED_VERSION' | 'BAD_IDENTIFIER' | 'INVALID_ARGUMENT' | 'BAD_FLAG' | 'BAD_WINDOW'>;
 export const Role: EnumOf<'CLIENT' | 'SERVER'>;
 export const Reason: EnumOf<'OK' | 'PEER_CLOSED' | 'CONNECT_FAILED' | 'POLICY_DENIED' | 'LIMIT_EXCEEDED' |
   'TRANSPORT_LOST' | 'KILLED' | 'AUTH_REVOKED' | 'TIMEOUT' | 'PROTOCOL_ERROR' | 'UNSUPPORTED_KIND' | 'SESSION_NOT_FOUND'>;
 export const FrameType: EnumOf<'UNKNOWN' | 'HELLO' | 'OPEN' | 'OPEN_OK' | 'OPEN_ERR' | 'DATA' | 'EOF' | 'RST' |
-  'PING' | 'PONG' | 'GOAWAY'>;
+  'PING' | 'PONG' | 'GOAWAY' | 'WINDOW'>;
 export const EventType: EnumOf<'UNKNOWN' | 'CONNECTED' | 'STREAM_OPENED' | 'STREAM_ACCEPTED' | 'DATA' | 'EOF' |
   'WRITABLE' | 'STREAM_CLOSED' | 'DISCONNECTED' | 'SESSION_CLOSED'>;
 export const SessionState: EnumOf<'DISCONNECTED' | 'HANDSHAKING' | 'ESTABLISHED' | 'DRAINING' | 'CLOSING' | 'CLOSED'>;
@@ -63,6 +63,7 @@ export interface StreamInfo {
   bytesReceived: number;
   createdAtMs: number;
   lastActivityMs: number;
+  sendCredit: number;
 }
 
 export interface Frame {
@@ -70,6 +71,8 @@ export interface Frame {
   streamId: number;
   version: number;
   resuming: boolean;
+  receiveWindow: number;
+  credit: number;
   sessionId: string;
   capabilities: Uint8Array;
   kind: string;
@@ -100,6 +103,8 @@ export interface Session {
   rejectStream(streamId: number, code: number, message?: Uint8Array): void;
   /** Returns how many bytes were accepted, which may be 0. */
   write(streamId: number, data: Uint8Array, nowMs: number): number;
+  /** The consumer has taken this many DATA bytes. Without this the stream stalls. */
+  consume(streamId: number, count: number): void;
   sendEof(streamId: number): void;
   resetStream(streamId: number, code?: number): void;
   pollTransmit(): Uint8Array | null;

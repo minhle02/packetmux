@@ -11,6 +11,7 @@ import { CONFIG, EVENT, FRAME, LIMITS, STREAM_INFO } from './layout.js';
 export * from './constants.js';
 
 const SCRATCH_SIZE = 16;
+const DEFAULT_RECEIVE_WINDOW = 256 * 1024;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -119,7 +120,7 @@ function makeSessionClass(wasm, heap) {
     heap.writeBytes(address + CONFIG.sessionId, sessionId.pointer, sessionId.size);
     heap.writeBytes(address + CONFIG.capabilities, capabilities.pointer, capabilities.size);
     for (const name of ['maxDataPayload', 'maxControlPayload', 'maxStreams', 'maxQueuedBytes',
-      'maxQueuedBytesPerStream', 'maxQueuedControlFrames', 'maxOutstandingPings']) {
+      'maxQueuedBytesPerStream', 'maxQueuedControlFrames', 'maxOutstandingPings', 'receiveWindow']) {
       if (options[name] !== undefined) {
         view.setUint32(address + CONFIG[name], options[name], true);
       }
@@ -223,6 +224,11 @@ function makeSessionClass(wasm, heap) {
       });
     }
 
+    /** The consumer has taken this many DATA bytes. Without this the stream stalls. */
+    consume(streamId, count) {
+      check(wasm._packetmux_session_consume(this.#handle, streamId, BigInt(count)));
+    }
+
     sendEof(streamId) {
       check(wasm._packetmux_session_send_eof(this.#handle, streamId));
     }
@@ -284,6 +290,7 @@ function makeSessionClass(wasm, heap) {
           bytesReceived: Number(view.getBigUint64(at + STREAM_INFO.bytesReceived, true)),
           createdAtMs: Number(view.getBigUint64(at + STREAM_INFO.createdAtMs, true)),
           lastActivityMs: Number(view.getBigUint64(at + STREAM_INFO.lastActivityMs, true)),
+          sendCredit: Number(view.getBigUint64(at + STREAM_INFO.sendCredit, true)),
         });
       }
       return streams;
@@ -314,6 +321,8 @@ function makeCodec(wasm, heap) {
           message: heap.readBytes(at + FRAME.message),
           data: heap.readBytes(at + FRAME.data),
           nonce: view.getBigUint64(at + FRAME.nonce, true),
+          receiveWindow: view.getUint32(at + FRAME.receiveWindow, true),
+          credit: view.getUint32(at + FRAME.credit, true),
         };
       })));
   }
@@ -336,6 +345,8 @@ function makeCodec(wasm, heap) {
         view.setUint8(at + FRAME.resuming, frame.resuming ? 1 : 0);
         view.setUint8(at + FRAME.code, frame.code ?? Reason.OK);
         view.setBigUint64(at + FRAME.nonce, BigInt(frame.nonce ?? 0), true);
+        view.setUint32(at + FRAME.receiveWindow, frame.receiveWindow ?? DEFAULT_RECEIVE_WINDOW, true);
+        view.setUint32(at + FRAME.credit, frame.credit ?? 0, true);
         [FRAME.sessionId, FRAME.capabilities, FRAME.kind, FRAME.params, FRAME.message, FRAME.data]
           .forEach((offset, index) => heap.writeBytes(at + offset, pointers[index], buffers[index].length));
 
@@ -362,7 +373,7 @@ function readDefaults(wasm, heap) {
     const view = heap.view();
     const defaults = {};
     for (const name of ['maxDataPayload', 'maxControlPayload', 'maxStreams', 'maxQueuedBytes',
-      'maxQueuedBytesPerStream', 'maxQueuedControlFrames', 'maxOutstandingPings']) {
+      'maxQueuedBytesPerStream', 'maxQueuedControlFrames', 'maxOutstandingPings', 'receiveWindow']) {
       defaults[name] = view.getUint32(at + CONFIG[name], true);
     }
     for (const name of ['helloTimeoutMs', 'pingIntervalMs', 'deadAfterMs', 'drainTimeoutMs']) {

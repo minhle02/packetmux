@@ -65,6 +65,8 @@ for (const { name, fields } of vectors) {
       message: hexField(fields, 'message'),
       data: hexField(fields, 'data'),
       nonce: BigInt(fields.nonce ?? 0),
+      receiveWindow: Number(fields.receive_window ?? 262144),
+      credit: Number(fields.credit ?? 0),
     };
     assert.deepEqual(decodeFrame(wire, limits), expected);
     if ((fields.roundtrip ?? 'true') === 'true') {

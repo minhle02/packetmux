@@ -57,6 +57,11 @@ SessionStatus Session::write(const uint32_t i_streamId,
   return m_stateMachine->write(i_streamId, i_bytes, i_nowMs, o_accepted);
 }
 
+SessionStatus Session::consume(const uint32_t i_streamId,
+                               const uint64_t i_bytes) {
+  return m_stateMachine->consume(i_streamId, i_bytes);
+}
+
 SessionStatus Session::sendEof(const uint32_t i_streamId) {
   return m_stateMachine->sendEof(i_streamId);
 }

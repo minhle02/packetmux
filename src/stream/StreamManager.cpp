@@ -72,17 +72,34 @@ bool StreamManager::onPeerOpen(const FrameView& i_frame) {
   return true;
 }
 
-void StreamManager::onFrame(const FrameView& i_frame) {
+void StreamManager::onPeerHello(const uint32_t i_receiveWindow) {
+  m_processor.setPeerReceiveWindow(i_receiveWindow);
+  for (const std::pair<const uint32_t, StreamStateMachine>& entry : m_streams) {
+    m_processor.openCredit(entry.first);  // opened during the handshake
+  }
+  m_processor.notifyWritable();
+}
+
+bool StreamManager::onFrame(const FrameView& i_frame) {
+  if (i_frame.type == FRAME_TYPE_WINDOW) {
+    // Not the stream's state: data queued before a local close still needs it.
+    return m_processor.onWindow(i_frame.streamId, i_frame.credit);
+  }
   StreamStateMachine* const stream = find(i_frame.streamId);
   if (stream == nullptr) {
-    return;  // late frame, or a stream the host rejected
+    return true;  // late frame, or a stream the host rejected
+  }
+  if (i_frame.type == FRAME_TYPE_DATA &&
+      !stream->takePeerCredit(i_frame.data.size())) {
+    return false;
   }
   const StreamStep step = stream->onFrame(i_frame);
   if (!step.valid) {
     failStream(i_frame.streamId);
-    return;
+    return true;
   }
   applyStep(i_frame.streamId, step);
+  return true;
 }
 
 SessionStatus StreamManager::accept(const uint32_t i_streamId) {
@@ -133,6 +150,16 @@ SessionStatus StreamManager::write(const uint32_t i_streamId,
   return SESSION_STATUS_OK;
 }
 
+SessionStatus StreamManager::consume(const uint32_t i_streamId,
+                                     const uint64_t i_bytes) {
+  StreamStateMachine* const stream = find(i_streamId);
+  if (stream == nullptr) {
+    return SESSION_STATUS_OK;  // it closed first, which is normal
+  }
+  return stream->consume(i_bytes) ? SESSION_STATUS_OK
+                                  : SESSION_STATUS_INVALID_ARGUMENT;
+}
+
 SessionStatus StreamManager::sendEof(const uint32_t i_streamId) {
   StreamStateMachine* const stream = find(i_streamId);
   if (stream == nullptr) {
@@ -161,6 +188,7 @@ void StreamManager::endAll(const ReasonCode i_code) {
     applyStep(m_streams.begin()->first,
               {.next = STREAM_STATE_CLOSED, .closeCode = i_code});
   }
+  m_processor.setPeerReceiveWindow(0U);  // the next HELLO sets it again
 }
 
 void StreamManager::notifyWritable() { m_processor.notifyWritable(); }
@@ -191,8 +219,10 @@ void StreamManager::add(const uint32_t i_streamId,
                             .kind = std::string(i_kind),
                             .opener = i_opener,
                             .createdAtMs = m_processor.nowMs(),
-                            .lastActivityMs = m_processor.nowMs()};
+                            .lastActivityMs = m_processor.nowMs(),
+                            .peerCredit = m_config.receiveWindow};
   m_streams.try_emplace(i_streamId, record, i_initialState, &m_processor);
+  m_processor.openCredit(i_streamId);
 }
 
 void StreamManager::applyStep(const uint32_t i_streamId,
@@ -203,6 +233,7 @@ void StreamManager::applyStep(const uint32_t i_streamId,
   if (i_step.next == STREAM_STATE_CLOSED) {
     m_streams.erase(i_streamId);
     m_processor.forgetBlocked(i_streamId);
+    m_processor.retireCredit(i_streamId);
     m_processor.emitClosed(i_streamId, i_step.closeCode);
     return;
   }

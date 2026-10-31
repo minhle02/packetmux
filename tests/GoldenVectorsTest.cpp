@@ -26,6 +26,7 @@ const std::map<std::string, CodecStatus> STATUS_NAMES{
     {"UNSUPPORTED_VERSION", CODEC_STATUS_UNSUPPORTED_VERSION},
     {"BAD_IDENTIFIER", CODEC_STATUS_BAD_IDENTIFIER},
     {"BAD_FLAG", CODEC_STATUS_BAD_FLAG},
+    {"BAD_WINDOW", CODEC_STATUS_BAD_WINDOW},
 };
 
 const std::map<std::string, FrameType> TYPE_NAMES{
@@ -34,6 +35,7 @@ const std::map<std::string, FrameType> TYPE_NAMES{
     {"DATA", FRAME_TYPE_DATA},       {"EOF", FRAME_TYPE_EOF},
     {"RST", FRAME_TYPE_RST},         {"PING", FRAME_TYPE_PING},
     {"PONG", FRAME_TYPE_PONG},       {"GOAWAY", FRAME_TYPE_GOAWAY},
+    {"WINDOW", FRAME_TYPE_WINDOW},
 };
 
 const std::map<std::string, ReasonCode> CODE_NAMES{
@@ -152,6 +154,9 @@ void checkValidVector(const Vector& i_vector, const Bytes& i_wire,
       .message = message,
       .data = data,
       .nonce = std::stoull(fieldOr(i_vector, "nonce", "0")),
+      .receiveWindow = static_cast<uint32_t>(std::stoul(fieldOr(
+          i_vector, "receive_window", std::to_string(DEFAULT_RECEIVE_WINDOW)))),
+      .credit = static_cast<uint32_t>(std::stoul(fieldOr(i_vector, "credit", "0"))),
   };
 
   FrameView decoded;
@@ -169,6 +174,10 @@ void checkValidVector(const Vector& i_vector, const Bytes& i_wire,
   EXPECT_EQ(Bytes(decoded.message.begin(), decoded.message.end()), message);
   EXPECT_EQ(Bytes(decoded.data.begin(), decoded.data.end()), data);
   EXPECT_EQ(decoded.nonce, expected.nonce);
+  if (expected.type == FRAME_TYPE_HELLO) {
+    EXPECT_EQ(decoded.receiveWindow, expected.receiveWindow);
+  }
+  EXPECT_EQ(decoded.credit, expected.credit);
 
   if (fieldOr(i_vector, "roundtrip", "true") == "true") {
     Bytes encoded;

@@ -48,6 +48,7 @@ class StreamInfo:
     bytes_received: int
     created_at_ms: int
     last_activity_ms: int
+    send_credit: int
 
 
 def config_defaults() -> dict[str, int]:
@@ -169,6 +170,10 @@ class Session:
         )
         return accepted.value
 
+    def consume(self, stream_id: int, count: int) -> None:
+        """The consumer has taken count DATA bytes. Without this the stream stalls."""
+        _check(lib.packetmux_session_consume(self._handle, stream_id, count))
+
     def send_eof(self, stream_id: int) -> None:
         _check(lib.packetmux_session_send_eof(self._handle, stream_id))
 
@@ -224,6 +229,7 @@ class Session:
                     bytes_received=native.bytes_received,
                     created_at_ms=native.created_at_ms,
                     last_activity_ms=native.last_activity_ms,
+                    send_credit=native.send_credit,
                 )
             )
         return streams
