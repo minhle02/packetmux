@@ -501,7 +501,7 @@ TEST(ConformanceTest, ManifestListsEveryFile) {
     for (const std::filesystem::directory_entry& entry :
          std::filesystem::directory_iterator(CONFORMANCE_DIR + "/" + layer)) {
       const std::string path =
-          std::filesystem::relative(entry.path(), CONFORMANCE_DIR).string();
+          std::filesystem::relative(entry.path(), CONFORMANCE_DIR).generic_string();
       EXPECT_TRUE(listed.contains(path)) << path;
     }
   }
