@@ -54,12 +54,12 @@ name is what the host gets back, and `-` means nothing happens.
 
 | State | attach | message | connection lost | tick | close | openStream | transmit drained |
 |---|---|---|---|---|---|---|---|
-| `DISCONNECTED` | → `HANDSHAKING` | `NOT_CONNECTED` | `NOT_CONNECTED` | - | → `CLOSED` | `NOT_CONNECTED` | - |
+| `DISCONNECTED` | → `HANDSHAKING` | `NOT_CONNECTED` | - | - | → `CLOSED` | `NOT_CONNECTED` | - |
 | `HANDSHAKING` | `ALREADY_CONNECTED` | → `ESTABLISHED`, or → `DRAINING` | → `DISCONNECTED` | timeout → `DISCONNECTED` | → `CLOSING` | opens | - |
 | `ESTABLISHED` | `ALREADY_CONNECTED` | dispatch, or → `DRAINING`, `DISCONNECTED`, `CLOSED` | → `DISCONNECTED` | ping, or dead → `DISCONNECTED` | → `CLOSING` | opens | - |
 | `DRAINING` | `ALREADY_CONNECTED` | ignored | → `DISCONNECTED` | timeout → `DISCONNECTED` | → `CLOSING` | `NOT_CONNECTED` | → `DISCONNECTED` |
 | `CLOSING` | `CLOSED` | ignored | → `CLOSED` | timeout → `CLOSED` | `CLOSED` | `CLOSED` | → `CLOSED` |
-| `CLOSED` | `CLOSED` | `CLOSED` | `CLOSED` | - | `CLOSED` | `CLOSED` | - |
+| `CLOSED` | `CLOSED` | `CLOSED` | - | - | `CLOSED` | `CLOSED` | - |
 
 Rules that apply to all transitions:
 - A session reaches `DISCONNECTED` or `CLOSED` with **no streams and empty queues**.

@@ -65,6 +65,8 @@ The same rules apply in both languages:
   event.
 - **Close your transport** when you get `DISCONNECTED` or `SESSION_CLOSED`. After `DISCONNECTED`, the
   session stays usable: reconnect and call `attach` again. Its streams have ended, so open new ones.
+- **Report a closed transport with `on_connection_lost`**, always. It does nothing if the session
+  already ended that connection.
 - **`session_id` and stream kinds** may only contain `a-z`, `A-Z`, `0-9` and `-`.
 - **Time** is in milliseconds, from a monotonic clock, as a whole number.
 
@@ -153,7 +155,7 @@ A server does not know which session a new connection belongs to until the first
 so it reads that message first. It also has to answer streams the peer opens:
 
 ```python
-from packetmux import Reason, Role, Session, SessionState, decode_frame
+from packetmux import Reason, Role, Session, decode_frame
 
 sessions: dict[str, Session] = {}
 
@@ -164,10 +166,9 @@ def on_new_connection(first_message: bytes, now_ms: int) -> Session:
     session = sessions.get(hello.session_id)
     if session is None:
         session = sessions[hello.session_id] = Session(Role.SERVER, hello.session_id)
-    elif session.state != SessionState.DISCONNECTED:
-        session.on_connection_lost()  # the client re-dialed before the old connection died
-        while session.poll_event() is not None:
-            pass  # in your host, handle these: the old streams have ended
+    session.on_connection_lost()  # the client may have re-dialed before the old connection died
+    while session.poll_event() is not None:
+        pass  # in your host, handle these: the old streams have ended
     session.attach_connection(now_ms)
     session.on_message(first_message, now_ms)
     return session

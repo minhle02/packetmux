@@ -163,6 +163,19 @@ def test_reconnect_keeps_the_session(pair: tuple[Peer, Peer]) -> None:
     assert client.session.open_stream("kind", b"", NOW_MS) > before
 
 
+def test_connection_lost_after_the_end_does_nothing(pair: tuple[Peer, Peer]) -> None:
+    client, _ = pair
+    client.session.on_connection_lost()
+    assert types(client.take()) == [EventType.DISCONNECTED]
+    client.session.on_connection_lost()
+    assert client.take() == []
+
+    client.session.close(Reason.OK, NOW_MS)
+    assert types(client.take()) == [EventType.SESSION_CLOSED]
+    client.session.on_connection_lost()
+    assert client.take() == []
+
+
 def test_close_ends_both_sessions(pair: tuple[Peer, Peer]) -> None:
     client, server = pair
     client.session.close(Reason.AUTH_REVOKED, NOW_MS)

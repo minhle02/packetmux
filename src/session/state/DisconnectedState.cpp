@@ -26,9 +26,7 @@ SessionStep DisconnectedState::onMessage(const std::span<const uint8_t>) {
   return stay(SESSION_STATUS_NOT_CONNECTED);
 }
 
-SessionStep DisconnectedState::onConnectionLost() {
-  return stay(SESSION_STATUS_NOT_CONNECTED);
-}
+SessionStep DisconnectedState::onConnectionLost() { return stay(); }
 
 SessionStep DisconnectedState::onTick() { return stay(); }
 

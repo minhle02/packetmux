@@ -47,6 +47,8 @@ class Session {
   // status other than OK means the host misused the call and nothing changed.
   SessionStatus onMessage(const std::span<const uint8_t> i_message,
                           const uint64_t i_nowMs);
+  // Call when the host's transport closes. Does nothing if the session already
+  // ended the connection, so the host need not track that.
   SessionStatus onConnectionLost();
   SessionStatus onTick(const uint64_t i_nowMs);
 

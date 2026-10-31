@@ -20,9 +20,7 @@ SessionStep ClosedState::onMessage(const std::span<const uint8_t>) {
   return stay(SESSION_STATUS_CLOSED);
 }
 
-SessionStep ClosedState::onConnectionLost() {
-  return stay(SESSION_STATUS_CLOSED);
-}
+SessionStep ClosedState::onConnectionLost() { return stay(); }
 
 SessionStep ClosedState::onTick() { return stay(); }
 

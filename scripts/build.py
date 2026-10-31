@@ -62,6 +62,16 @@ def artifacts(target: str, build_dir: Path, build_type: str) -> list[Path]:
     return [build_dir / build_type / "packetmux.dll"]  # Visual Studio is multi-config
 
 
+def cached_build_type(build_dir: Path) -> str | None:
+    cache = build_dir / "CMakeCache.txt"
+    if not cache.exists():
+        return None
+    for line in cache.read_text().splitlines():
+        if line.startswith("CMAKE_BUILD_TYPE:"):
+            return line.partition("=")[2]
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build PacketMux for one target.")
     parser.add_argument("target", choices=TARGETS)
@@ -78,7 +88,14 @@ def main() -> None:
         sys.exit(f"error: {args.target} must be built on {args.target}, not {sys.platform}")
 
     build_dir = REPOSITORY / "build" / args.target
-    if args.clean:
+    # Make compares whole-second timestamps on macOS, so objects built in the same second as
+    # the new flags count as up to date, and the library ends up mixing two build types.
+    # Visual Studio is multi-config and keeps each build type in its own directory.
+    type_changed = args.target != "windows" and cached_build_type(build_dir) not in (
+        None,
+        args.build_type,
+    )
+    if args.clean or type_changed:
         shutil.rmtree(build_dir, ignore_errors=True)
 
     try:

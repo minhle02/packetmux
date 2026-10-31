@@ -185,6 +185,18 @@ test('reconnect keeps the session', () => {
   assert.ok(client.session.openStream('kind', null, NOW_MS) > before);
 });
 
+test('connection lost after the end does nothing', () => {
+  client.session.onConnectionLost();
+  assert.deepEqual(types(client.take()), [EventType.DISCONNECTED]);
+  client.session.onConnectionLost();
+  assert.deepEqual(client.take(), []);
+
+  client.session.close(Reason.OK, NOW_MS);
+  assert.deepEqual(types(client.take()), [EventType.SESSION_CLOSED]);
+  client.session.onConnectionLost();
+  assert.deepEqual(client.take(), []);
+});
+
 test('close ends both sessions', () => {
   client.session.close(Reason.AUTH_REVOKED, NOW_MS);
   assert.equal(client.session.state, SessionState.CLOSING);

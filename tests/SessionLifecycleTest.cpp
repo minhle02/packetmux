@@ -48,7 +48,7 @@ constexpr Cell TABLE[SESSION_STATE_MAX][EVENT_MAX] = {
     // drained
     {{OK, HAND},
      {NOT_CONNECTED, DISC},
-     {NOT_CONNECTED, DISC},
+     {OK, DISC},
      {OK, DISC},
      {OK, CLSD},
      {NOT_CONNECTED, DISC},
@@ -83,7 +83,7 @@ constexpr Cell TABLE[SESSION_STATE_MAX][EVENT_MAX] = {
      {OK, CLSD}},
     {{CLOSED_STATUS, CLSD},
      {CLOSED_STATUS, CLSD},
-     {CLOSED_STATUS, CLSD},
+     {OK, CLSD},
      {OK, CLSD},
      {CLOSED_STATUS, CLSD},
      {CLOSED_STATUS, CLSD},
@@ -243,6 +243,26 @@ TEST(SessionLifecycleTest, HostReportsLostConnection) {
   EXPECT_EQ(events[0].code, REASON_CODE_TRANSPORT_LOST);
   EXPECT_EQ(events[1].code, REASON_CODE_TRANSPORT_LOST);
   EXPECT_TRUE(harness.takeFrames().empty());
+}
+
+TEST(SessionLifecycleTest, LostAfterTheConnectionAlreadyEndedDoesNothing) {
+  SessionHarness harness;
+  harness.establish();
+  ASSERT_EQ(harness.lost(), OK);
+  ASSERT_EQ(typesOf(harness.takeEvents()),
+            EventTypes{EVENT_TYPE_DISCONNECTED});
+
+  EXPECT_EQ(harness.lost(), OK);
+  EXPECT_EQ(harness.state(), DISC);
+  EXPECT_TRUE(harness.takeEvents().empty());
+
+  ASSERT_EQ(harness.close(REASON_CODE_OK), OK);
+  ASSERT_EQ(typesOf(harness.takeEvents()),
+            EventTypes{EVENT_TYPE_SESSION_CLOSED});
+
+  EXPECT_EQ(harness.lost(), OK);
+  EXPECT_EQ(harness.state(), CLSD);
+  EXPECT_TRUE(harness.takeEvents().empty());
 }
 
 TEST(SessionLifecycleTest, HelloTimeoutFiresAtExactlyTheDeadline) {
