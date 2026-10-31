@@ -1,0 +1,74 @@
+{
+  "scenarios": [
+    {"name": "the-stream-limit-refuses-the-rest", "requirement": "FR-BP-1", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 100, "max_queued_bytes": 1000}, "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 101}, "expect_accepted": 100},
+      {"op": "write", "stream": 1, "data": "ab", "expect_accepted": 0},
+      {"op": "drain"}
+    ]},
+    {"name": "the-session-limit-refuses-the-rest", "requirement": "FR-BP-1", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 100, "max_queued_bytes": 150}, "steps": [
+      {"op": "open", "kind": "a", "expect_id": 1},
+      {"op": "open", "kind": "b", "expect_id": 3},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 100}, "expect_accepted": 100},
+      {"op": "write", "stream": 3, "data": {"repeat": "ab", "count": 100}, "expect_accepted": 50},
+      {"op": "drain"}
+    ]},
+    {"name": "one-full-stream-leaves-others-writable", "requirement": "FR-BP-1a", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 100, "max_queued_bytes": 1000}, "steps": [
+      {"op": "open", "kind": "a", "expect_id": 1},
+      {"op": "open", "kind": "b", "expect_id": 3},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 200}, "expect_accepted": 100},
+      {"op": "write", "stream": 3, "data": {"repeat": "ab", "count": 10}, "expect_accepted": 10},
+      {"op": "drain"}
+    ]},
+    {"name": "writable-follows-room-after-a-refusal", "requirement": "FR-BP-2", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 100, "max_queued_bytes": 1000}, "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 101}, "expect_accepted": 100},
+      {"op": "expect_frames", "frames": [{"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 100}}]},
+      {"op": "expect_events", "events": [{"type": "WRITABLE", "stream_id": 1}]},
+      {"op": "write", "stream": 1, "data": "ab", "expect_accepted": 1},
+      {"op": "drain"}
+    ]},
+    {"name": "no-writable-without-a-refusal", "requirement": "FR-BP-2", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 100, "max_queued_bytes": 1000}, "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 100}, "expect_accepted": 100},
+      {"op": "drain_frames"},
+      {"op": "expect_events", "events": []}
+    ]},
+    {"name": "no-writable-after-eof", "requirement": "FR-BP-2", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 100, "max_queued_bytes": 1000}, "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 101}, "expect_accepted": 100},
+      {"op": "eof", "stream": 1},
+      {"op": "drain_frames"},
+      {"op": "expect_events", "events": []}
+    ]},
+    {"name": "control-frames-do-not-count-towards-the-byte-limits", "requirement": "FR-BP-1b", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 10, "max_queued_bytes": 10}, "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 10}, "expect_accepted": 10},
+      {"op": "drain"}
+    ]},
+    {"name": "a-control-flood-ends-the-connection", "requirement": "FR-BP-1b", "role": "client", "setup": "established", "config": {"max_queued_control_frames": 4, "max_streams": 1}, "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 2}},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 3}},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 4}},
+      {"op": "expect_state", "state": "ESTABLISHED"},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 5}},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "LIMIT_EXCEEDED"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "expect_frames", "frames": []}
+    ]},
+    {"name": "a-small-control-cap-is-refused", "requirement": "FR-BP-1b", "role": "client", "config": {"max_queued_control_frames": 3, "max_streams": 1}, "steps": [
+      {"op": "attach", "expect_status": "INVALID_ARGUMENT"},
+      {"op": "expect_state", "state": "DISCONNECTED"}
+    ]}
+  ]
+}

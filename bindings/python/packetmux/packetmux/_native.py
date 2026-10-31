@@ -67,6 +67,7 @@ class Frame(Structure):
         ("type", c_uint8),
         ("stream_id", c_uint32),
         ("version", c_uint16),
+        ("resuming", c_bool),
         ("session_id", Bytes),
         ("capabilities", Bytes),
         ("kind", Bytes),

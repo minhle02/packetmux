@@ -48,8 +48,8 @@ constexpr StreamState CL = STREAM_STATE_CLOSED;
 constexpr StreamState STAY = STREAM_STATE_MAX;
 constexpr uint8_t INVALID = 0xFFU;  // the cell is "not allowed"
 
-// Written out here on purpose: this is the table from section 1.2 of
-// docs/design/M2_SESSION_CORE.md, kept independent of the state classes.
+// Written out here on purpose: this is the table from section 5.3 of
+// docs/spec/PROTOCOL.md, kept independent of the state classes.
 constexpr uint8_t TABLE[STATE_COUNT][INPUT_MAX] = {
     // OPEN_OK  OPEN_ERR  DATA     EOF      RST  ACCEPT   REJECT   WRITE
     // SEND_EOF RESET

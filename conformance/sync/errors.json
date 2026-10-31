@@ -1,0 +1,130 @@
+{
+  "scenarios": [
+    {"name": "lost-connection-ends-streams-and-keeps-the-session", "requirement": "FR-SES-2", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "lost"},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "TRANSPORT_LOST"}, {"type": "DISCONNECTED", "code": "TRANSPORT_LOST"}]},
+      {"op": "expect_frames", "frames": []},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": true}]}
+    ]},
+    {"name": "close-sends-goaway-and-ends-streams", "requirement": "FR-SES-4", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "close", "code": "AUTH_REVOKED"},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "AUTH_REVOKED"}]},
+      {"op": "open", "kind": "k", "expect_status": "CLOSED"},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "AUTH_REVOKED"}]},
+      {"op": "expect_events", "events": [{"type": "SESSION_CLOSED", "code": "AUTH_REVOKED"}]},
+      {"op": "expect_state", "state": "CLOSED"}
+    ]},
+    {"name": "close-ok-reports-peer-closed-to-streams", "requirement": "FR-SES-4", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "close", "code": "OK"},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PEER_CLOSED"}]},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "OK"}]},
+      {"op": "expect_events", "events": [{"type": "SESSION_CLOSED", "code": "OK"}]}
+    ]},
+    {"name": "close-drops-queued-data", "requirement": "FR-SES-4", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa"},
+      {"op": "close", "code": "OK"},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "OK"}]},
+      {"op": "drain_events"}
+    ]},
+    {"name": "close-gives-up-after-the-drain-timeout", "requirement": "FR-SES-4", "role": "client", "setup": "established", "steps": [
+      {"op": "close", "code": "OK"},
+      {"op": "expect_deadline", "ms": 1000},
+      {"op": "advance", "ms": 999},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "advance", "ms": 1},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "expect_events", "events": [{"type": "SESSION_CLOSED", "code": "OK"}]}
+    ]},
+    {"name": "close-while-disconnected", "requirement": "FR-SES-4", "role": "client", "steps": [
+      {"op": "close", "code": "OK"},
+      {"op": "expect_events", "events": [{"type": "SESSION_CLOSED", "code": "OK"}]},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "expect_frames", "frames": []}
+    ]},
+    {"name": "goaway-ends-the-session", "requirement": "FR-SES-5", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "GOAWAY", "code": "AUTH_REVOKED"}},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "AUTH_REVOKED"}, {"type": "SESSION_CLOSED", "code": "AUTH_REVOKED"}]},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "expect_frames", "frames": []}
+    ]},
+    {"name": "goaway-ok-reports-peer-closed-to-streams", "requirement": "FR-SES-5", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "GOAWAY", "code": "OK"}},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PEER_CLOSED"}, {"type": "SESSION_CLOSED", "code": "OK"}]}
+    ]},
+    {"name": "goaway-session-not-found", "requirement": "FR-CLI-4a", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "drain_frames"},
+      {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1", "resuming": true}},
+      {"op": "expect_events", "events": [{"type": "CONNECTED", "peer_session_id": "peer-1"}]},
+      {"op": "rx", "frame": {"type": "GOAWAY", "code": "SESSION_NOT_FOUND"}},
+      {"op": "expect_events", "events": [{"type": "SESSION_CLOSED", "code": "SESSION_NOT_FOUND"}]},
+      {"op": "expect_state", "state": "CLOSED"}
+    ]},
+    {"name": "garbage-sends-goaway-and-then-disconnects", "requirement": "FR-ERR-1", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "wire": "ff"},
+      {"op": "expect_state", "state": "DRAINING"},
+      {"op": "expect_deadline", "ms": 1000},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "PROTOCOL_ERROR", "codec_status": "TRUNCATED"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"}
+    ]},
+    {"name": "protocol-error-ends-streams-and-drops-their-data", "requirement": "FR-ERR-1", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa"},
+      {"op": "rx", "wire": "ff"},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "TRANSPORT_LOST"}]},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "PROTOCOL_ERROR", "codec_status": "TRUNCATED"}]}
+    ]},
+    {"name": "protocol-error-gives-up-after-the-drain-timeout", "requirement": "FR-ERR-1", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "wire": "ff"},
+      {"op": "advance", "ms": 999},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "DRAINING"},
+      {"op": "advance", "ms": 1},
+      {"op": "tick"},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "PROTOCOL_ERROR", "codec_status": "TRUNCATED"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "expect_frames", "frames": []}
+    ]},
+    {"name": "messages-are-ignored-while-draining", "requirement": "FR-ERR-1", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "wire": "ff"},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "expect_state", "state": "DRAINING"},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "PROTOCOL_ERROR"}]},
+      {"op": "drain_events"}
+    ]},
+    {"name": "an-unknown-reason-code-becomes-protocol-error", "requirement": "FR-FRAME-5", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "wire": "0700000001ff"},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]}
+    ]}
+  ]
+}

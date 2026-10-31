@@ -28,6 +28,7 @@ class CodecStatus(IntEnum):
     UNSUPPORTED_VERSION = 6
     BAD_IDENTIFIER = 7
     INVALID_ARGUMENT = 8
+    BAD_FLAG = 9
 
 
 class Role(IntEnum):
@@ -47,6 +48,7 @@ class Reason(IntEnum):
     TIMEOUT = 8
     PROTOCOL_ERROR = 9
     UNSUPPORTED_KIND = 10
+    SESSION_NOT_FOUND = 11
 
 
 class FrameType(IntEnum):

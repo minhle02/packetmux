@@ -17,117 +17,19 @@ framer, fuzzing and performance work (M5).
 
 ## 2. Wire format
 
-### 2.1 Conventions
-- All integers are unsigned and **big-endian** (FR-WIRE-2).
-- `u8`, `u16`, `u32`, `u64` are 1, 2, 4 and 8 bytes.
-- `id16` = `u16` length + that many identifier characters (§2.5). Length MUST be ≥ 1.
-- `bytes32` = `u32` length + that many opaque bytes. Length MAY be 0.
-- A payload MUST end exactly after its last field. Bytes left over are an error (FR-WIRE-4a).
+The wire format now lives in `docs/spec/PROTOCOL.md` §2, which keeps these section numbers. This
+note keeps the reasoning:
 
-### 2.2 Header
-
-```
-offset  size  field
-0       1     type        u8  (§2.3)
-1       4     stream_id   u32
-5       ...   payload     (rest of the message)
-```
-`HEADER_SIZE = 5`. There is no length field: one transport message is one frame.
-
-### 2.3 Frame types
-
-| Wire value | Name | stream_id | Payload |
-|---|---|---|---|
-| 0 | (`FRAME_TYPE_UNKNOWN`) | — | never valid on the wire |
-| 1 | `HELLO` | 0 | `version u16 \| session_id id16 \| capabilities bytes32` |
-| 2 | `OPEN` | ≠ 0 | `kind id16 \| params bytes32` |
-| 3 | `OPEN_OK` | ≠ 0 | empty |
-| 4 | `OPEN_ERR` | ≠ 0 | `code u8 \| message bytes32` |
-| 5 | `DATA` | ≠ 0 | raw bytes, length 1 … `maxDataPayload` |
-| 6 | `EOF` | ≠ 0 | empty |
-| 7 | `RST` | ≠ 0 | `code u8` |
-| 8 | `PING` | 0 | `nonce u64` |
-| 9 | `PONG` | 0 | `nonce u64` |
-| 10 | `GOAWAY` | 0 | `code u8` |
-
-Size limits:
-- `HELLO`, `OPEN` and `OPEN_ERR` payloads are each at most `maxControlPayload` (default 32 KiB).
-- `DATA` is at most `maxDataPayload` (default 16 000).
-
-**`HELLO.version` stays at payload offset 0 in every future protocol version.** A v2 peer can then
-always read a v3 peer's version and reject it cleanly, even if the rest of the layout changes.
-
-### 2.4 Reason codes
-
-| Wire value | Name | Notes |
-|---|---|---|
-| 0 | `OK` | |
-| 1 | `PEER_CLOSED` | |
-| 2 | `CONNECT_FAILED` | |
-| 3 | `POLICY_DENIED` | |
-| 4 | `LIMIT_EXCEEDED` | |
-| 5 | `TRANSPORT_LOST` | local only, never encoded (FR-FRAME-6) |
-| 6 | `KILLED` | |
-| 7 | `AUTH_REVOKED` | |
-| 8 | `TIMEOUT` | |
-| 9 | `PROTOCOL_ERROR` | |
-| 10 | `UNSUPPORTED_KIND` | |
-
-On decode, a code ≥ 11 (unknown) or equal to 5 (`TRANSPORT_LOST`) becomes `PROTOCOL_ERROR`. The
-frame itself is still valid (FR-FRAME-5). On encode, `TRANSPORT_LOST` and values ≥ 11 are refused.
-
-### 2.5 Identifiers
-
-`kind` and `session_id` are identifiers (FR-WIRE-4b). Every byte MUST be one of the ASCII
-characters `a-z`, `A-Z`, `0-9` or `-`. Spaces, `_`, `.`, NUL and every byte ≥ 0x80 are refused.
-
-Both directions check this: the encoder refuses to produce such a frame, and the decoder rejects
-it. No Unicode handling is needed, and bindings can always turn an identifier into a native
-string.
-
-### 2.6 Examples
-
-```
-HELLO   session "s1", no capabilities
-        01 00000000 | 0002 | 0002 7331 | 00000000
-OPEN    stream 1, kind "tcp-forward", params "{}"
-        02 00000001 | 000b 7463702d666f7277617264 | 00000002 7b7d
-OPEN_OK 03 00000001
-OPEN_ERR stream 1, POLICY_DENIED, message "no"
-        04 00000001 | 03 | 00000002 6e6f
-DATA    stream 3, "hi"
-        05 00000003 | 6869
-EOF     06 00000003
-RST     stream 3, KILLED
-        07 00000003 | 06
-PING    nonce 1
-        08 00000000 | 0000000000000001
-PONG    09 00000000 | 0000000000000001
-GOAWAY  AUTH_REVOKED
-        0a 00000000 | 07
-```
+- A `length` prefix is not needed in the header, because one transport message is one frame.
+- `HELLO.version` stays at payload offset 0 in every future version, so a peer can always read another
+  version and reject it cleanly, even if the rest of the layout changes.
+- Identifiers are limited to `[a-zA-Z0-9-]` so that no Unicode handling is needed, and bindings can
+  always turn one into a native string.
 
 ## 3. Decoding rules and error order
 
-`Codec::decode` applies these checks **in this order** and returns the first failure. A fixed order
-makes the status deterministic for inputs with several faults, so golden vectors can assert it.
-
-| # | Check | Status on failure |
-|---|---|---|
-| 1 | message ≥ 5 bytes | `TRUNCATED` |
-| 2 | type is 1 … 10 | `UNKNOWN_TYPE` |
-| 3 | stream_id is 0 for `HELLO`/`PING`/`PONG`/`GOAWAY`, ≠ 0 otherwise | `BAD_STREAM_ID` |
-| 4 | payload ≤ its limit (`DATA`: `maxDataPayload`; `HELLO`/`OPEN`/`OPEN_ERR`: `maxControlPayload`) | `PAYLOAD_TOO_LARGE` |
-| 5 | fixed sizes: `OPEN_OK`/`EOF` = 0, `RST`/`GOAWAY` = 1, `PING`/`PONG` = 8, `DATA` ≥ 1 | `BAD_PAYLOAD_SIZE` |
-| 6 | fields, left to right. `HELLO`: version is read first and must be 2 | `UNSUPPORTED_VERSION` |
-| 7 | a field or length prefix runs past the end | `TRUNCATED` |
-| 8 | an `id16` is empty or has a character outside §2.5 | `BAD_IDENTIFIER` |
-| 9 | bytes left after the last field | `BAD_PAYLOAD_SIZE` |
-
-Steps 6–9 run as one left-to-right pass: the first field that fails decides the status.
-
-Lengths are compared with the bytes remaining (`length > remaining`). They are never added to an
-offset, so a hostile `u32` length cannot overflow `size_t`, including on wasm32.
+The checks and their order now live in `docs/spec/PROTOCOL.md` §3. The order is fixed because a fixed
+order makes the status deterministic for inputs with several faults, so golden vectors can assert it.
 
 ## 4. Public API (`include/packetmux/`)
 
@@ -206,6 +108,7 @@ struct FrameView {
   FrameType type = FRAME_TYPE_UNKNOWN;
   uint32_t streamId = CONNECTION_STREAM_ID;
   uint16_t version = PROTOCOL_VERSION;    // HELLO
+  bool resuming = false;                  // HELLO
   std::string_view sessionId;             // HELLO
   std::span<const uint8_t> capabilities;  // HELLO
   std::string_view kind;                  // OPEN
@@ -393,42 +296,8 @@ This turns NFR-PORT-1/4 into a test that runs on every build.
 
 ## 7. Golden vectors
 
-`tests/vectors/FramesV2.txt` is language-neutral. C++ reads it in M1; the Python and JS bindings
-re-run it in M4. It is a simple INI-like format, so any language can parse it in a few lines:
-
-```
-# Comment lines start with '#'. Hex values may contain spaces.
-[hello_basic]
-wire = 01 00000000 0002 0002 7331 00000000
-type = HELLO
-stream_id = 0
-version = 2
-session_id = 7331
-
-[rst_unknown_code]
-wire = 07 00000003 ff
-type = RST
-stream_id = 3
-code = PROTOCOL_ERROR
-roundtrip = false
-
-[open_kind_bad_char]
-wire = 02 00000001 0003 615f62 00000000
-status = BAD_IDENTIFIER
-```
-
-| Key | Meaning |
-|---|---|
-| `wire` | The full message, in hex |
-| `status` | Expected `CodecStatus` name without prefix. Default `OK` |
-| `type`, `code` | Enum names without prefix |
-| `stream_id`, `version`, `nonce` | Decimal |
-| `session_id`, `kind`, `capabilities`, `params`, `message`, `data` | Hex (so invalid identifiers can be written). Omitted = empty |
-| `max_data_payload`, `max_control_payload` | Decimal. `FrameLimits` for this vector, so the size limits can be tested without huge vectors. Omitted = default |
-| `roundtrip` | Default `true`: re-encoding the decoded fields must reproduce `wire` exactly. Set to `false` when decoding remaps a value |
-
-For `status = OK` vectors, the test checks decode → expected fields and, when `roundtrip` is true,
-also encode → `wire`. For error vectors it checks decode → `status` only.
+The vectors moved to `conformance/vectors/frames.txt`, and their format is described in
+`conformance/README.md`.
 
 Minimum set:
 - **Valid:** one vector per frame type (the §2.6 examples), plus empty `capabilities`, `params`

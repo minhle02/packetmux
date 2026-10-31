@@ -63,6 +63,7 @@ enum {
   PACKETMUX_CODEC_STATUS_UNSUPPORTED_VERSION,
   PACKETMUX_CODEC_STATUS_BAD_IDENTIFIER,
   PACKETMUX_CODEC_STATUS_INVALID_ARGUMENT,
+  PACKETMUX_CODEC_STATUS_BAD_FLAG,
   PACKETMUX_CODEC_STATUS_MAX
 };
 
@@ -80,6 +81,7 @@ enum {
   PACKETMUX_REASON_TIMEOUT,
   PACKETMUX_REASON_PROTOCOL_ERROR,
   PACKETMUX_REASON_UNSUPPORTED_KIND,
+  PACKETMUX_REASON_SESSION_NOT_FOUND,
   PACKETMUX_REASON_MAX
 };
 
@@ -190,6 +192,7 @@ typedef struct {
   packetmux_frame_type_t type;
   uint32_t stream_id;
   uint16_t version;
+  bool resuming;
   packetmux_bytes_t session_id;
   packetmux_bytes_t capabilities;
   packetmux_bytes_t kind;

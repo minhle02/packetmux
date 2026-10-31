@@ -3,10 +3,10 @@ export type EnumOf<T extends string> = Readonly<Record<T, number>>;
 export const Status: EnumOf<'OK' | 'CLOSED' | 'NOT_CONNECTED' | 'ALREADY_CONNECTED' | 'EVENTS_PENDING' |
   'UNKNOWN_STREAM' | 'INVALID_STATE' | 'LIMIT_EXCEEDED' | 'IDS_EXHAUSTED' | 'INVALID_ARGUMENT'>;
 export const CodecStatus: EnumOf<'OK' | 'TRUNCATED' | 'UNKNOWN_TYPE' | 'BAD_STREAM_ID' | 'PAYLOAD_TOO_LARGE' |
-  'BAD_PAYLOAD_SIZE' | 'UNSUPPORTED_VERSION' | 'BAD_IDENTIFIER' | 'INVALID_ARGUMENT'>;
+  'BAD_PAYLOAD_SIZE' | 'UNSUPPORTED_VERSION' | 'BAD_IDENTIFIER' | 'INVALID_ARGUMENT' | 'BAD_FLAG'>;
 export const Role: EnumOf<'CLIENT' | 'SERVER'>;
 export const Reason: EnumOf<'OK' | 'PEER_CLOSED' | 'CONNECT_FAILED' | 'POLICY_DENIED' | 'LIMIT_EXCEEDED' |
-  'TRANSPORT_LOST' | 'KILLED' | 'AUTH_REVOKED' | 'TIMEOUT' | 'PROTOCOL_ERROR' | 'UNSUPPORTED_KIND'>;
+  'TRANSPORT_LOST' | 'KILLED' | 'AUTH_REVOKED' | 'TIMEOUT' | 'PROTOCOL_ERROR' | 'UNSUPPORTED_KIND' | 'SESSION_NOT_FOUND'>;
 export const FrameType: EnumOf<'UNKNOWN' | 'HELLO' | 'OPEN' | 'OPEN_OK' | 'OPEN_ERR' | 'DATA' | 'EOF' | 'RST' |
   'PING' | 'PONG' | 'GOAWAY'>;
 export const EventType: EnumOf<'UNKNOWN' | 'CONNECTED' | 'STREAM_OPENED' | 'STREAM_ACCEPTED' | 'DATA' | 'EOF' |
@@ -69,6 +69,7 @@ export interface Frame {
   type: number;
   streamId: number;
   version: number;
+  resuming: boolean;
   sessionId: string;
   capabilities: Uint8Array;
   kind: string;

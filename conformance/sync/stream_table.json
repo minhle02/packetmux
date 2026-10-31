@@ -1,0 +1,602 @@
+{
+  "scenarios": [
+    {"name": "stream-sender-opening-open-ok", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "OPEN"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-open-err", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_ERR", "stream_id": 1, "code": "POLICY_DENIED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-data", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "aa"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-sender-opening-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-sender-opening-rst", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 1, "code": "KILLED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-accept", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "accept", "stream": 1, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "SENDER_OPENING"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-reject", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "reject", "stream": 1, "code": "POLICY_DENIED", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "SENDER_OPENING"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-write", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "SENDER_OPENING"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-send-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "eof", "stream": 1},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "SENDER_OPENING_EOF_SENT"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-reset", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "reset", "stream": 1, "code": "KILLED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-open-ok", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_LOCAL"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-open-err", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_ERR", "stream_id": 1, "code": "POLICY_DENIED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-data", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "aa"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-rst", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 1, "code": "KILLED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-accept", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "accept", "stream": 1, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "SENDER_OPENING_EOF_SENT"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-reject", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "reject", "stream": 1, "code": "POLICY_DENIED", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "SENDER_OPENING_EOF_SENT"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-write", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "SENDER_OPENING_EOF_SENT"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-send-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "eof", "stream": 1, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "SENDER_OPENING_EOF_SENT"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-sender-opening-eof-sent-reset", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "reset", "stream": 1, "code": "KILLED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-open-ok", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 2}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-receiver-opening-open-err", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_ERR", "stream_id": 2, "code": "POLICY_DENIED"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-receiver-opening-data", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 2, "data": "aa"}},
+      {"op": "expect_streams", "streams": [{"stream_id": 2, "state": "RECEIVER_OPENING"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "expect_streams", "streams": [{"stream_id": 2, "state": "RECEIVER_OPENING_EOF_RECEIVED"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-rst", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 2, "code": "KILLED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-accept", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "accept", "stream": 2},
+      {"op": "expect_streams", "streams": [{"stream_id": 2, "state": "OPEN"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-reject", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "reject", "stream": 2, "code": "POLICY_DENIED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-write", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "write", "stream": 2, "data": "aa", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 2, "state": "RECEIVER_OPENING"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-send-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "eof", "stream": 2, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 2, "state": "RECEIVER_OPENING"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-reset", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain"},
+      {"op": "reset", "stream": 2, "code": "KILLED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-open-ok", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 2}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-open-err", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_ERR", "stream_id": 2, "code": "POLICY_DENIED"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-data", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 2, "data": "aa"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 2, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-rst", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 2, "code": "KILLED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-accept", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "accept", "stream": 2},
+      {"op": "expect_streams", "streams": [{"stream_id": 2, "state": "HALF_CLOSED_REMOTE"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-reject", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "reject", "stream": 2, "code": "POLICY_DENIED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-write", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "write", "stream": 2, "data": "aa", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 2, "state": "RECEIVER_OPENING_EOF_RECEIVED"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-send-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "eof", "stream": 2, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 2, "state": "RECEIVER_OPENING_EOF_RECEIVED"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-receiver-opening-eof-received-reset", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "drain"},
+      {"op": "reset", "stream": 2, "code": "KILLED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-open-open-ok", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-open-open-err", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_ERR", "stream_id": 1, "code": "POLICY_DENIED"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-open-data", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "aa"}},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "OPEN"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-open-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_REMOTE"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-open-rst", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 1, "code": "KILLED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-open-accept", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "accept", "stream": 1, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "OPEN"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-open-reject", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "reject", "stream": 1, "code": "POLICY_DENIED", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "OPEN"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-open-write", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "OPEN"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-open-send-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "eof", "stream": 1},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_LOCAL"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-open-reset", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "reset", "stream": 1, "code": "KILLED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-local-open-ok", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-half-closed-local-open-err", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_ERR", "stream_id": 1, "code": "POLICY_DENIED"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-half-closed-local-data", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "aa"}},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_LOCAL"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-local-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-local-rst", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 1, "code": "KILLED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-local-accept", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "accept", "stream": 1, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_LOCAL"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-local-reject", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "reject", "stream": 1, "code": "POLICY_DENIED", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_LOCAL"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-local-write", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_LOCAL"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-local-send-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "eof", "stream": 1, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_LOCAL"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-local-reset", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "reset", "stream": 1, "code": "KILLED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-remote-open-ok", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-half-closed-remote-open-err", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_ERR", "stream_id": 1, "code": "POLICY_DENIED"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-half-closed-remote-data", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "aa"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-half-closed-remote-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "stream-half-closed-remote-rst", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 1, "code": "KILLED"}},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-remote-accept", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "accept", "stream": 1, "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_REMOTE"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-remote-reject", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "reject", "stream": 1, "code": "POLICY_DENIED", "expect_status": "INVALID_STATE"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_REMOTE"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-remote-write", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "state": "HALF_CLOSED_REMOTE"}]},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-remote-send-eof", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "eof", "stream": 1},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]},
+    {"name": "stream-half-closed-remote-reset", "requirement": "PROTOCOL stream table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "reset", "stream": 1, "code": "KILLED"},
+      {"op": "expect_streams", "streams": []},
+      {"op": "drain"}
+    ]}
+  ]
+}

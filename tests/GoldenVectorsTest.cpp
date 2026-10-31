@@ -25,6 +25,7 @@ const std::map<std::string, CodecStatus> STATUS_NAMES{
     {"BAD_PAYLOAD_SIZE", CODEC_STATUS_BAD_PAYLOAD_SIZE},
     {"UNSUPPORTED_VERSION", CODEC_STATUS_UNSUPPORTED_VERSION},
     {"BAD_IDENTIFIER", CODEC_STATUS_BAD_IDENTIFIER},
+    {"BAD_FLAG", CODEC_STATUS_BAD_FLAG},
 };
 
 const std::map<std::string, FrameType> TYPE_NAMES{
@@ -46,6 +47,7 @@ const std::map<std::string, ReasonCode> CODE_NAMES{
     {"TIMEOUT", REASON_CODE_TIMEOUT},
     {"PROTOCOL_ERROR", REASON_CODE_PROTOCOL_ERROR},
     {"UNSUPPORTED_KIND", REASON_CODE_UNSUPPORTED_KIND},
+    {"SESSION_NOT_FOUND", REASON_CODE_SESSION_NOT_FOUND},
 };
 
 struct Vector {
@@ -141,6 +143,7 @@ void checkValidVector(const Vector& i_vector, const Bytes& i_wire,
           static_cast<uint32_t>(std::stoul(i_vector.fields.at("stream_id"))),
       .version =
           static_cast<uint16_t>(std::stoul(fieldOr(i_vector, "version", "2"))),
+      .resuming = fieldOr(i_vector, "resuming", "0") == "1",
       .sessionId = asText(sessionId),
       .capabilities = capabilities,
       .kind = asText(kind),
@@ -156,6 +159,7 @@ void checkValidVector(const Vector& i_vector, const Bytes& i_wire,
   EXPECT_EQ(decoded.type, expected.type);
   EXPECT_EQ(decoded.streamId, expected.streamId);
   EXPECT_EQ(decoded.version, expected.version);
+  EXPECT_EQ(decoded.resuming, expected.resuming);
   EXPECT_EQ(decoded.sessionId, expected.sessionId);
   EXPECT_EQ(Bytes(decoded.capabilities.begin(), decoded.capabilities.end()),
             capabilities);
@@ -175,7 +179,7 @@ void checkValidVector(const Vector& i_vector, const Bytes& i_wire,
 
 TEST(GoldenVectorsTest, FramesV2) {
   const std::vector<Vector> vectors =
-      loadVectors(std::string(PACKETMUX_VECTORS_DIR) + "/FramesV2.txt");
+      loadVectors(std::string(PACKETMUX_CONFORMANCE_DIR) + "/vectors/frames.txt");
   ASSERT_GE(vectors.size(), 50U);
 
   std::map<std::string, size_t> names;

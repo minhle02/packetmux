@@ -4,7 +4,8 @@ Status: implemented. Exit criteria met on macOS arm64 (§7).
 Requirements: `docs/requirements/INTENT.md` (NFR-PORT-3/6, D3).
 
 Both bindings are thin: one call to one `packetmux_*` function, plus memory handling. They stay
-synchronous, like the library. `asyncio` and Promise wrappers belong to the consumer (RemoteDevice).
+synchronous, like the library. This document first left `asyncio` and Promise wrappers to the
+consumer. That is reversed: the async SDK now lives in PacketMux (`INTENT.md` §5.12, D13).
 
 ## 1. API
 

@@ -306,6 +306,7 @@ function makeCodec(wasm, heap) {
           type: view.getUint8(at + FRAME.type),
           streamId: view.getUint32(at + FRAME.streamId, true),
           version: view.getUint16(at + FRAME.version, true),
+          resuming: view.getUint8(at + FRAME.resuming) !== 0,
           sessionId: heap.readText(at + FRAME.sessionId),
           capabilities: heap.readBytes(at + FRAME.capabilities),
           kind: heap.readText(at + FRAME.kind),
@@ -333,6 +334,7 @@ function makeCodec(wasm, heap) {
         view.setUint8(at + FRAME.type, frame.type ?? FrameType.UNKNOWN);
         view.setUint32(at + FRAME.streamId, frame.streamId ?? 0, true);
         view.setUint16(at + FRAME.version, frame.version ?? 2, true);
+        view.setUint8(at + FRAME.resuming, frame.resuming ? 1 : 0);
         view.setUint8(at + FRAME.code, frame.code ?? Reason.OK);
         view.setBigUint64(at + FRAME.nonce, BigInt(frame.nonce ?? 0), true);
         [FRAME.sessionId, FRAME.capabilities, FRAME.kind, FRAME.params, FRAME.message, FRAME.data]

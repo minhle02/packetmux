@@ -25,7 +25,7 @@ struct OpenRequest {
 
 /**
  * One session state. Every state must answer every event, so the compiler flags
- * any case left out. See docs/design/M2_SESSION_CORE.md section 1.1.
+ * any case left out. See docs/spec/PROTOCOL.md section 4.2.
  */
 class SessionStateBase {
  public:

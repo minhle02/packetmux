@@ -1,17 +1,25 @@
-# PacketMux protocol v2 golden vectors. Format: docs/design/M1_FRAME_CODEC.md, section 7.
+# PacketMux protocol v2 golden vectors. Format: conformance/README.md.
 # Hex values may contain spaces. Identifier fields are hex, so invalid ones can be written.
 
 # --- Valid frames ---------------------------------------------------------------------------
 
 [hello_basic]
-wire = 01 00000000 0002 0002 7331 00000000
+wire = 01 00000000 0002 00 0002 7331 00000000
 type = HELLO
 stream_id = 0
 version = 2
 session_id = 7331
 
+[hello_resuming]
+wire = 01 00000000 0002 01 0002 7331 00000000
+type = HELLO
+stream_id = 0
+version = 2
+resuming = 1
+session_id = 7331
+
 [hello_capabilities]
-wire = 01 00000000 0002 0001 61 00000002 0102
+wire = 01 00000000 0002 00 0001 61 00000002 0102
 type = HELLO
 stream_id = 0
 version = 2
@@ -118,7 +126,7 @@ code = PROTOCOL_ERROR
 roundtrip = false
 
 [rst_first_unknown_code]
-wire = 07 00000003 0b
+wire = 07 00000003 0c
 type = RST
 stream_id = 3
 code = PROTOCOL_ERROR
@@ -130,6 +138,12 @@ type = RST
 stream_id = 3
 code = PROTOCOL_ERROR
 roundtrip = false
+
+[goaway_session_not_found]
+wire = 0a 00000000 0b
+type = GOAWAY
+stream_id = 0
+code = SESSION_NOT_FOUND
 
 [goaway_unknown_code]
 wire = 0a 00000000 c8
@@ -164,7 +178,7 @@ wire = 0b 00000000
 status = UNKNOWN_TYPE
 
 [hello_on_stream]
-wire = 01 00000001 0002 0002 7331 00000000
+wire = 01 00000001 0002 00 0002 7331 00000000
 status = BAD_STREAM_ID
 
 [ping_on_stream]
@@ -183,8 +197,8 @@ max_data_payload = 2
 status = PAYLOAD_TOO_LARGE
 
 [hello_too_large]
-wire = 01 00000000 0002 0002 7331 00000000
-max_control_payload = 9
+wire = 01 00000000 0002 00 0002 7331 00000000
+max_control_payload = 10
 status = PAYLOAD_TOO_LARGE
 
 [open_ok_with_payload]
@@ -235,8 +249,12 @@ status = UNSUPPORTED_VERSION
 wire = 01 00000000 00
 status = TRUNCATED
 
+[hello_no_resuming]
+wire = 01 00000000 0002
+status = TRUNCATED
+
 [hello_capabilities_past_end]
-wire = 01 00000000 0002 0002 7331 00000001
+wire = 01 00000000 0002 00 0002 7331 00000001
 status = TRUNCATED
 
 [open_kind_past_end]
@@ -274,17 +292,17 @@ wire = 02 00000001 0002 c3a9 00000000
 status = BAD_IDENTIFIER
 
 [hello_session_id_dot]
-wire = 01 00000000 0002 0003 612e62 00000000
+wire = 01 00000000 0002 00 0003 612e62 00000000
 status = BAD_IDENTIFIER
 
 [hello_session_id_empty]
-wire = 01 00000000 0002 0000 00000000
+wire = 01 00000000 0002 00 0000 00000000
 status = BAD_IDENTIFIER
 
 # --- Rejected: bytes left after the last field --------------------------------------------------
 
 [hello_trailing_byte]
-wire = 01 00000000 0002 0002 7331 00000000 00
+wire = 01 00000000 0002 00 0002 7331 00000000 00
 status = BAD_PAYLOAD_SIZE
 
 [open_trailing_byte]
@@ -294,3 +312,9 @@ status = BAD_PAYLOAD_SIZE
 [open_err_trailing_byte]
 wire = 04 00000001 03 00000000 00
 status = BAD_PAYLOAD_SIZE
+
+# --- Rejected: a flag that is neither 0 nor 1 -----------------------------------------------------
+
+[hello_bad_flag]
+wire = 01 00000000 0002 02 0002 7331 00000000
+status = BAD_FLAG

@@ -24,6 +24,7 @@ class Frame:
     type: FrameType = FrameType.UNKNOWN
     stream_id: int = 0
     version: int = 2
+    resuming: bool = False
     session_id: str = ""
     capabilities: bytes = b""
     kind: str = ""
@@ -54,6 +55,7 @@ def decode_frame(
         type=FrameType(native.type),
         stream_id=native.stream_id,
         version=native.version,
+        resuming=native.resuming,
         session_id=copy_of(native.session_id).decode("ascii"),
         capabilities=copy_of(native.capabilities),
         kind=copy_of(native.kind).decode("ascii"),
@@ -77,6 +79,7 @@ def encode_frame(
         type=frame.type,
         stream_id=frame.stream_id,
         version=frame.version,
+        resuming=frame.resuming,
         session_id=view_of(session_id),
         capabilities=view_of(frame.capabilities),
         kind=view_of(kind),

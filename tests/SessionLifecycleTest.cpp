@@ -41,8 +41,8 @@ constexpr SessionState DRAI = SESSION_STATE_DRAINING;
 constexpr SessionState CLNG = SESSION_STATE_CLOSING;
 constexpr SessionState CLSD = SESSION_STATE_CLOSED;
 
-// Written out here on purpose: this is the table from section 1.1 of
-// docs/design/M2_SESSION_CORE.md, kept independent of the state classes.
+// Written out here on purpose: this is the table from section 4.2 of
+// docs/spec/PROTOCOL.md, kept independent of the state classes.
 constexpr Cell TABLE[SESSION_STATE_MAX][EVENT_MAX] = {
     // attach         message              lost                 tick close open
     // drained
@@ -379,7 +379,7 @@ struct ProtocolErrorCase {
 };
 
 TEST(SessionLifecycleTest, ProtocolErrorsDrainThenDisconnect) {
-  const Bytes secondHello{0x01, 0, 0, 0, 0, 0, 2, 0, 1, 0x61, 0, 0, 0, 0};
+  const Bytes secondHello{0x01, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0x61, 0, 0, 0, 0};
   const Bytes wrongParity{0x02, 0, 0, 0, 1, 0, 1, 0x61, 0, 0, 0, 0};
   const Bytes dataFrame{0x05, 0, 0, 0, 1, 0x61};
   const Bytes wrongVersion{0x01, 0, 0, 0, 0, 0, 3};
@@ -637,7 +637,7 @@ TEST(SessionLifecycleTest, EventsMustBeDrainedBeforeTheNextMessage) {
   SessionHarness harness;
   ASSERT_EQ(harness.attach(), OK);
 
-  const Bytes hello{0x01, 0, 0, 0, 0, 0, 2, 0, 1, 0x61, 0, 0, 0, 0};
+  const Bytes hello{0x01, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0x61, 0, 0, 0, 0};
   const uint64_t nowMs = harness.nowMs();
   ASSERT_EQ(harness.session().onMessage(hello, nowMs), OK);
 

@@ -1,4 +1,4 @@
-"""The language-neutral vectors from tests/vectors/FramesV2.txt, through the binding."""
+"""The language-neutral vectors from conformance/vectors/frames.txt, through the binding."""
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import pytest
 
 from packetmux import CodecError, CodecStatus, Frame, FrameType, Reason, decode_frame, encode_frame
 
-VECTORS = Path(__file__).resolve().parents[4] / "tests/vectors/FramesV2.txt"
+VECTORS = Path(__file__).resolve().parents[4] / "conformance/vectors/frames.txt"
 DEFAULT_LIMITS = {"max_data_payload": 16000, "max_control_payload": 32 * 1024}
 
 
@@ -55,6 +55,7 @@ def test_vector(fields: dict[str, str]) -> None:
         type=FrameType[fields["type"]],
         stream_id=int(fields["stream_id"]),
         version=int(fields.get("version", "2")),
+        resuming=fields.get("resuming", "0") == "1",
         session_id=hex_field(fields, "session_id").decode("ascii"),
         capabilities=hex_field(fields, "capabilities"),
         kind=hex_field(fields, "kind").decode("ascii"),

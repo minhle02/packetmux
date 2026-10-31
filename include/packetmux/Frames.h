@@ -41,6 +41,7 @@ enum ReasonCode : uint8_t {
   REASON_CODE_TIMEOUT,
   REASON_CODE_PROTOCOL_ERROR,
   REASON_CODE_UNSUPPORTED_KIND,
+  REASON_CODE_SESSION_NOT_FOUND,
   REASON_CODE_MAX,
 };
 
@@ -55,6 +56,7 @@ enum CodecStatus : uint8_t {
   CODEC_STATUS_BAD_IDENTIFIER,
   CODEC_STATUS_INVALID_ARGUMENT,  // encode only: e.g. a reason code that may
                                   // not be sent
+  CODEC_STATUS_BAD_FLAG,
   CODEC_STATUS_MAX,
 };
 
@@ -73,6 +75,7 @@ struct FrameView {
   FrameType type = FRAME_TYPE_UNKNOWN;
   uint32_t streamId = CONNECTION_STREAM_ID;
   uint16_t version = PROTOCOL_VERSION;    // HELLO
+  bool resuming = false;                  // HELLO
   std::string_view sessionId;             // HELLO
   std::span<const uint8_t> capabilities;  // HELLO
   std::string_view kind;                  // OPEN

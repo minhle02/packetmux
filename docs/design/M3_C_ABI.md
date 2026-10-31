@@ -97,6 +97,7 @@ typedef struct {
   packetmux_frame_type_t type;
   uint32_t stream_id;
   uint16_t version;
+  bool resuming;
   packetmux_bytes_t session_id;
   packetmux_bytes_t capabilities;
   packetmux_bytes_t kind;

@@ -1,6 +1,8 @@
 # PacketMux — Intent and Requirements
 
-Status: draft, for review. Version of the wire protocol described here: **2**.
+Status: core implemented (M1 to M4). SDK sections approved, not implemented. Version of the
+wire protocol described here: **2**. It is not released yet, so `HELLO.resuming` and
+`SESSION_NOT_FOUND` are added to v2 directly (D8, D22).
 
 The keywords MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are used as in RFC 2119.
 Each requirement has an ID so that design documents, code and tests can refer to it.
@@ -23,6 +25,19 @@ dependencies beyond the standard library. The library compiles to native code an
 is used from every host language through thin bindings. Each host keeps its own transport
 (WebSocket, WebRTC, ...) and its own async runtime.
 
+Integrating the core into RemoteDevice showed that this is not enough. The protocol now exists once,
+but each host still had to write the same async layer around it (769 lines in Python, 938 in
+TypeScript) and follow the same rules by hand. Those rules are easy to break: both hosts lost frames
+on re-dial in the same way, because a send loop took a frame after its connection was replaced.
+
+**Intent, SDK:** a consumer MUST be **one import and a few calls away** from working streams, and
+MUST NOT need to understand the session logic. Each language ships an **async-first SDK** with the
+same shape. The only thing a consumer implements is a **Transport**. The sans-I/O core stays
+underneath, unchanged in purpose.
+
+**Intent, other languages:** adding a language MUST take the published specs and a language-neutral
+conformance suite, not a reading of the C++ source.
+
 ## 2. Scope
 
 ### 2.1 In scope
@@ -35,27 +50,39 @@ is used from every host language through thin bindings. Each host keeps its own 
 - An optional length-prefix framer for byte-stream transports (§5.11).
 - A stable C ABI over the C++ API.
 - Thin bindings for Python and for JavaScript/TypeScript (WASM), in `bindings/<language>/`.
+- An async-first SDK in Python and TypeScript, on top of those bindings: client, server, async
+  streams, reconnect, and a Transport interface (§5.12 to §5.16).
+- An in-memory transport with fault injection, for tests of the SDK and of consumers.
+- A protocol spec, a binding spec and a language-neutral conformance suite (§5.17).
 
 ### 2.2 Out of scope (for this version)
-- Wire transports (WebSocket, WebRTC, TCP, QUIC), TLS, authentication, device locking.
+- Wire transports other than the in-memory one (WebSocket, WebRTC, TCP, QUIC), TLS, authentication,
+  device locking. The consumer implements the Transport and decides who is allowed in, through a hook
+  (FR-SRV-3).
 - Credit-based flow control (`WINDOW` frames).
 - Priority classes and weighted scheduling. Planned as a separate layer (ROADMAP.md §3).
 - A connection pool with more than one live connection per session.
 - Retransmission, acknowledgements, or resuming streams across a reconnect. Planned as a separate
   layer (ROADMAP.md §2).
-- Running stream handlers (dialing TCP targets, pumping sockets). This is host code.
-- Management HTTP API, reconnect dialing, reconnect grace timers. These are host or service code.
-  The library only keeps session state; the host decides how long a disconnected session lives.
+- What a stream handler does (dialing TCP targets, pumping sockets). The SDK calls the handler; the
+  work inside it is consumer code.
+- How to reach the peer, including choosing between transports (for example, WebRTC with a WebSocket
+  fallback). This lives in the consumer's dial function. The SDK decides when to call it.
+- Management HTTP API.
 - Compression and encryption of payloads.
+
+Reconnect and the grace period are in scope for the SDK and stay out of the **core**, which only
+keeps session state and never starts anything on its own (FR-API-1).
 
 ## 3. Users of the library
 
 | User | Platform | How it uses the library |
 |---|---|---|
-| RemoteDevice backend | Python on Linux, macOS, Windows | Native build, Python binding, server role |
-| RemoteDevice remote client | Python, packaged with PyInstaller | Native build, Python binding, client role |
-| RemoteDevice frontend | Electron renderer (browser JS) | WASM build, JS binding, client role |
-| Future consumers | Any language with a C FFI | C ABI |
+| RemoteDevice backend | Python on Linux, macOS, Windows | Python SDK, server role |
+| RemoteDevice remote client | Python, packaged with PyInstaller | Python SDK, client role |
+| RemoteDevice frontend | Electron renderer (browser JS) | TypeScript SDK over WASM, client role |
+| Future consumers | Python or TypeScript | SDK, with their own Transport |
+| Authors of a new language binding | Any language with a C FFI | C ABI, the specs and the conformance suite (§5.17) |
 
 ## 4. Terminology
 
@@ -70,6 +97,12 @@ is used from every host language through thin bindings. Each host keeps its own 
 | Opener / acceptor | The peer that sent `OPEN` for a stream / the peer that received it. |
 | Host | The program that embeds the library and drives it (Python, JS, ...). |
 | Role | `client` or `server`. It decides stream ID parity only; otherwise the protocol is symmetric. |
+| Core | The C++ library and its C ABI: sans-I/O, synchronous. |
+| Binding | The thin synchronous wrapper over the core in one language (M4). |
+| SDK | The async layer over a binding. This is what consumers use. |
+| Consumer | An application that uses the SDK. |
+| Dial function | A consumer function that takes the session ID and returns one newly opened Transport. The SDK calls it to connect and to reconnect. |
+| Grace period | How long a server keeps a disconnected session for the client to come back. |
 
 ## 5. Functional requirements
 
@@ -113,7 +146,7 @@ is used from every host language through thin bindings. Each host keeps its own 
 
 | Type | stream_id | Payload (logical content) | Meaning |
 |---|---|---|---|
-| `HELLO` | 0 | version, session_id, capabilities (opaque) | First frame in each direction on a new connection |
+| `HELLO` | 0 | version, resuming (flag), session_id, capabilities (opaque) | First frame in each direction on a new connection |
 | `OPEN` | ≠ 0 | kind (identifier), params (opaque) | Open a stream |
 | `OPEN_OK` | ≠ 0 | none | Acceptor accepted the stream |
 | `OPEN_ERR` | ≠ 0 | reason code, message (opaque) | Acceptor rejected the stream |
@@ -135,7 +168,7 @@ is used from every host language through thin bindings. Each host keeps its own 
   fields. A rejected frame is a protocol error (FR-ERR-1).
 - **FR-FRAME-5** Reason codes: `OK`, `PEER_CLOSED`, `CONNECT_FAILED`, `POLICY_DENIED`,
   `LIMIT_EXCEEDED`, `TRANSPORT_LOST`, `KILLED`, `AUTH_REVOKED`, `TIMEOUT`, `PROTOCOL_ERROR`,
-  `UNSUPPORTED_KIND`. An unknown reason code received from a peer MUST be treated as
+  `UNSUPPORTED_KIND`, `SESSION_NOT_FOUND`. An unknown reason code received from a peer MUST be treated as
   `PROTOCOL_ERROR`. It MUST NOT be rejected as a malformed frame.
 - **FR-FRAME-6** `TRANSPORT_LOST` MUST only be reported locally and MUST NOT be sent on the wire.
 
@@ -150,6 +183,9 @@ is used from every host language through thin bindings. Each host keeps its own 
 - **FR-HS-5** The peer's session_id and capabilities MUST be handed to the host. The host decides
   whether the session_id is acceptable (for example, binding to an existing session). The library
   does not authenticate.
+- **FR-HS-7** `HELLO` MUST carry a `resuming` flag. It is false until the session has finished a
+  handshake once, and true on every connection after that. The core sets it, so a host cannot get
+  it wrong. A retry after a handshake that never finished is still not resuming.
 
 ### 5.4 Streams
 
@@ -177,7 +213,7 @@ is used from every host language through thin bindings. Each host keeps its own 
 - **FR-STR-9** Stream states: `SENDER_OPENING`, `SENDER_OPENING_EOF_SENT`, `RECEIVER_OPENING`,
   `RECEIVER_OPENING_EOF_RECEIVED`, `OPEN`, `HALF_CLOSED_LOCAL`, `HALF_CLOSED_REMOTE`, `CLOSED`. The
   sender is the side that sent `OPEN`, and the receiver is the side that received it. Allowed
-  transitions are the table in `docs/design/M2_SESSION_CORE.md` §1.2.
+  transitions are the table in `docs/spec/PROTOCOL.md` §5.3.
 - **FR-STR-10** A stream MUST close cleanly once both sides have sent `EOF`. A stream MUST close
   with a reason code on `RST` (either direction), `OPEN_ERR`, or connection loss. The host MUST see
   the reason `OK` only for a clean close: `OK` from any other cause is reported as `PEER_CLOSED`.
@@ -254,7 +290,7 @@ is used from every host language through thin bindings. Each host keeps its own 
   `GOAWAY(PROTOCOL_ERROR)`, let the host flush it, and then declare the connection lost. If the
   host has not taken the frame within `drain_timeout`, the connection MUST be declared lost anyway.
 - **FR-ERR-2** A stream-level protocol error MUST reset only that stream. This covers every frame
-  that is invalid for the stream's state (`docs/design/M2_SESSION_CORE.md` §1.2), including
+  that is invalid for the stream's state (`docs/spec/PROTOCOL.md` §5.3), including
   FR-STR-12.
 - **FR-ERR-3** All errors MUST be reported through return values (status codes or result types).
   The public API MUST NOT throw exceptions.
@@ -329,6 +365,165 @@ Session ─ SessionStateMachine ─┬─ one class per session state
 The session enforces the queue limits, using the scheduler's counters, so a future priority scheduler
 does not have to repeat that logic.
 
+### 5.12 SDK
+
+- **FR-SDK-1** The SDK MUST be available in Python (`asyncio`) and in TypeScript (Promises), with the
+  same concepts, the same operations and the same behaviour. Only naming and language idioms differ.
+- **FR-SDK-2** The SDK MUST be the default import of each package. The synchronous binding stays
+  available under a separate import for advanced use.
+- **FR-SDK-3** A consumer MUST NOT have to pump events or frames, run a timer, run send or read loops,
+  wait for `WRITABLE`, retry a partial write, pass the time, load WASM, or free native memory.
+- **FR-SDK-4** The SDK MUST keep every host rule itself, so that no consumer can break one:
+  - drain events after every core call;
+  - keep event handling synchronous;
+  - pull frames only while the transport has room (FR-SCH-5);
+  - close the transport only after the send path has finished, because `SESSION_CLOSED` fires
+    before `GOAWAY` is on the wire;
+  - ignore anything a replaced connection reports, and never let its send loop take a frame after
+    it has been replaced;
+  - never call the core for a stream that has closed;
+  - pass whole milliseconds from a monotonic clock.
+- **FR-SDK-5** Every operation that can block MUST be cancellable in the language's own way (task
+  cancellation in Python, `AbortSignal` in TypeScript). Cancelling MUST leave the session usable.
+- **FR-SDK-6** Errors MUST be typed, and the same across languages: stream reset (with its reason
+  code), stream closed, no connection, session closed, session not found, limit exceeded. No
+  consumer should have to read a status code from the core.
+- **FR-SDK-7** All SDK objects of one session MUST be used from one event loop (NFR-CON-1).
+- **FR-SDK-8** The SDK MUST NOT change the wire protocol. An SDK peer and a peer built directly on a
+  binding MUST interoperate.
+- **FR-SDK-9** The SDK MUST NOT expose priority or flow control. If priority is added (ROADMAP.md
+  §3), the consumer only states which priority a stream needs, and all scheduling stays in the core.
+
+### 5.13 Transport interface
+
+- **FR-TP-1** Each SDK MUST define one Transport interface. It is what a consumer implements, and it
+  MUST have the same operations in every language: send a message, receive the next message, report
+  the bytes buffered, wait until the buffer is below a limit, and close.
+- **FR-TP-2** A Transport MUST deliver whole messages, reliably and in order. It MUST NOT lose a
+  message that arrives before the SDK starts receiving.
+- **FR-TP-3** After a Transport closes, whether cleanly or not, send, receive and wait MUST fail with
+  one Transport-closed error, in each language. Close MUST be idempotent.
+- **FR-TP-4** A Transport MUST declare the largest message it can carry. The SDK MUST refuse a
+  Transport that cannot carry the session's largest frame, rather than fail in the middle of a
+  transfer.
+- **FR-TP-5** Each SDK MUST ship an in-memory Transport pair as public API. Tests MUST be able to
+  stall it, release it and break it.
+- **FR-TP-6** The TypeScript SDK MUST provide a helper for push-based sources (WebSocket, data
+  channel), so that a consumer does not write the queue behind receive by hand.
+
+### 5.14 Client
+
+- **FR-CLI-1** A client MUST be created from a dial function. The call returns once the handshake
+  has finished.
+- **FR-CLI-1a** The SDK MUST generate the session ID, once per client, from a secure random source.
+  A consumer MUST NOT be able to supply one (D21). The client MUST expose its ID to read, and MUST
+  pass it to the dial function, because a consumer may need it to reach the peer (for example, in a
+  URL).
+- **FR-CLI-2** After a connection is lost, the SDK MUST call the dial function again, with backoff,
+  on the same session. The backoff MUST reset only after a handshake finishes.
+- **FR-CLI-3** The dial function MUST be able to stop reconnecting for good (for example, when
+  credentials are refused). The client then closes with that error. Reconnect MUST also stop on
+  `GOAWAY` and on a local close.
+- **FR-CLI-4** Streams MUST NOT survive a reconnect: they end with `TRANSPORT_LOST` (FR-SES-2). A
+  stream opened while reconnecting MUST wait for the connection, for at most `connect_timeout`, and
+  then fail with a no-connection error.
+- **FR-CLI-4a** If the server no longer has the session, the client MUST close with a
+  session-not-found error, and reconnect MUST stop. The SDK MUST NOT open a replacement session by
+  itself: the consumer's streams and any state tied to the session are gone, so it decides what to
+  do, and connects again to get a new session with a new ID (D22).
+- **FR-CLI-5** A consumer MUST be able to observe the connection state (connecting, connected,
+  reconnecting, closed) and the active Transport. "Connected" MUST mean the handshake has finished.
+  A failed handshake and a replaced connection MUST NOT be reported as a lost connection.
+- **FR-CLI-6** Closing a client MUST send `GOAWAY`, wait for the send path within `drain_timeout`,
+  close the Transport and release native memory. It MUST be idempotent, and it MUST work as
+  `async with` in Python and as an awaited close in TypeScript.
+
+### 5.15 Server
+
+- **FR-SRV-1** A consumer MUST be able to hand each accepted Transport to a server object. The SDK
+  then reads the first message, finds or creates the session, and runs the connection.
+- **FR-SRV-2** The first message MUST be validated before any session is touched. It MUST be a valid
+  `HELLO`, and it MUST arrive within `hello_timeout`. Otherwise the Transport is closed.
+- **FR-SRV-3** An authorization hook MUST run before an existing session is touched, so that a peer
+  that only knows a session ID cannot take over a live connection. Device locks, tokens and policy
+  stay in the consumer.
+- **FR-SRV-4** A re-dial on a session that still looks connected MUST replace the old connection,
+  and MUST NOT start the grace period.
+- **FR-SRV-5** A disconnected session MUST be kept for `grace_period` and then closed. Attaching a
+  connection MUST cancel the timer.
+- **FR-SRV-6** The number of sessions MUST be bounded by `max_sessions`. A new session over the limit
+  MUST be refused without affecting existing ones.
+- **FR-SRV-7** A consumer MUST be able to list sessions, and to close one with a reason code.
+- **FR-SRV-8** The server MUST be available in both languages. In TypeScript it is meant for Node.
+- **FR-SRV-9** A `HELLO` with `resuming` set for a session the server does not have MUST NOT create
+  a session. After the authorization hook, the server MUST answer `HELLO`, then
+  `GOAWAY(SESSION_NOT_FOUND)`, and close the Transport.
+
+### 5.16 Async streams
+
+- **FR-AST-1** Either role MUST be able to open a stream with a kind and params, and write to it at
+  once, without waiting for `OPEN_OK` (FR-STR-5). A consumer MUST also be able to wait until the peer
+  has accepted.
+- **FR-AST-2** Inbound streams MUST go to handlers registered by kind. A kind with no handler MUST be
+  rejected with `UNSUPPORTED_KIND`. A handler MUST be able to reject a stream with a reason code. If
+  a handler fails, its stream MUST be reset rather than left open.
+- **FR-AST-3** Writing MUST wait until every byte is accepted, across `WRITABLE` events and however
+  large the write. Concurrent writes on one stream MUST NOT interleave.
+- **FR-AST-4** Reading MUST return the next chunk in order, and a distinct end-of-stream value once
+  the peer has half-closed and all data has been read. A reset MUST fail the next read with its
+  reason code, even if data is still buffered (D18). Async iteration MUST be supported.
+- **FR-AST-5** The SDK stream MUST buffer received data, because the core does not (FR-BP-3). The
+  buffer MUST be bounded by `max_read_buffer`. Going past it MUST reset that stream with
+  `LIMIT_EXCEEDED`, and MUST NOT affect other streams.
+- **FR-AST-6** A stream MUST expose half-close, reset with a reason code, a way to wait until it has
+  closed, and the details in FR-SES-7, plus the high-water mark of its read buffer.
+- **FR-AST-7** All reads MUST go through one internal path that knows how many bytes the consumer has
+  taken, so that credit flow control (ROADMAP.md §4) can be added without changing the consumer API.
+- **FR-AST-8** A consumer MUST be able to declare a stream type: a kind plus typed params fields. The
+  SDK then encodes and decodes the params, so neither side handles bytes or repeats the kind. The
+  encoding is JSON. On the wire, params stay opaque bytes (FR-WIRE-5), and the core does not change.
+  Raw `bytes` params MUST stay available, and they skip this and FR-AST-9.
+- **FR-AST-9** The SDK MUST validate typed params with its own validator, with no schema library
+  (NFR-SDK-2):
+  - Outgoing params that do not match their type MUST fail locally, and nothing is sent.
+  - Incoming params are untrusted (NFR-SEC-1). Params that do not match MUST reject the stream with
+    `PROTOCOL_ERROR` before the handler runs, and the connection stays up.
+  - Field types are string, int, float and bool, each optionally nullable, in a flat object. An int
+    is a whole number within ±(2^53 − 1), so every language reads it the same way.
+  - A missing field is rejected unless it has a declared default. A field the type does not declare
+    is ignored, so that adding a field does not break an older peer.
+  - Invalid UTF-8, invalid JSON, a value that is not an object, and the non-standard values `NaN`
+    and `Infinity` are rejected.
+
+### 5.17 Specs and conformance
+
+- **FR-CONF-1** A protocol spec MUST define the wire format, the session and stream state machines
+  and the error behaviour, in a form that does not depend on any language. It is authoritative: if
+  the core disagrees with it, one of them has a bug, and it MUST be settled and recorded.
+- **FR-CONF-2** A binding spec MUST define what a language has to provide: wrapping the C ABI, buffer
+  ownership, error mapping, the SDK surface, the Transport interface, the host rules (FR-SDK-4), and
+  the typed params encoding and validation rules (FR-AST-8, FR-AST-9).
+- **FR-CONF-3** A conformance suite MUST live in `conformance/` as language-neutral data, with one
+  small runner per language. It MUST have five layers:
+  - **vectors:** frame encoding and decoding, including errors;
+  - **sync:** scripted inputs and time, with the exact expected frames and events;
+  - **params:** typed params cases, as declared fields plus input bytes, with the decoded value or a
+    rejection expected. Every language MUST accept and reject the same inputs;
+  - **async:** SDK scenarios over the in-memory Transport, asserting outcomes and not interleaving;
+  - **transport:** checks that any Transport implementation can run against itself.
+- **FR-CONF-4** Python and TypeScript MUST pass the whole suite. The C++ tests MUST run the vectors
+  and sync layers.
+- **FR-CONF-5** The transport layer MUST be available to consumers, so they can check their own
+  Transport.
+- **FR-CONF-6** Every bug found in a host MUST become a scenario. The suite MUST start with: a stale
+  sender after re-dial, a lost `WRITABLE` when a queue is dropped, `on_connection_lost` after the
+  session has ended, `EVENTS_PENDING` after `poll_transmit`, a re-dial on a live session, and a
+  re-dial for a session the server no longer has.
+- **FR-CONF-7** The suite MUST be versioned with the protocol. A protocol version bump MUST update the
+  specs and scenarios with it (D8).
+- **FR-CONF-8** The suite MUST be shown to catch bugs: deliberate bugs injected into a binding or an
+  SDK MUST make it fail.
+
 ## 6. Non-functional requirements
 
 ### 6.1 Portability and dependencies
@@ -345,8 +540,8 @@ does not have to repeat that logic.
   (`-fno-exceptions -fno-rtti`). This keeps the WASM build small.
 - **NFR-PORT-6** Binding code (Python, JS) MAY use other dependencies. These dependencies MUST NOT
   leak into the core library target.
-- **NFR-PORT-7** Tests use GoogleTest, fetched with CMake `FetchContent`. GoogleTest is linked only
-  into test executables, never into the library.
+- **NFR-PORT-7** Tests use GoogleTest and `nlohmann/json`, fetched with CMake `FetchContent`. Both are
+  linked only into test executables, never into the library.
 
 ### 6.2 Concurrency and determinism
 - **NFR-CON-1** A session is not thread-safe. The host MUST serialize calls on one session.
@@ -384,9 +579,24 @@ does not have to repeat that logic.
   be a message interface (push received message, pull next message to send). The layers in `ROADMAP.md`
   can then be inserted without changing the session code.
 
+### 6.6 SDK
+- **NFR-SDK-1** The core MUST NOT change to suit one language. Logic that every SDK would otherwise
+  repeat SHOULD move into the core, as long as the core stays sans-I/O.
+- **NFR-SDK-2** The SDK MUST have no runtime dependencies beyond the Python standard library or the
+  JS runtime, plus the core itself. Python 3.12 is the minimum. TypeScript MUST run in Node and in
+  browser-like renderers, including Electron.
+- **NFR-SDK-3** All memory a peer can make the SDK use MUST be bounded by configuration, as in
+  NFR-SEC-2.
+- **NFR-SDK-4** An application MUST be able to open a stream to a peer in about 10 lines, not
+  counting its Transport. The README MUST show this as the main path.
+- **NFR-SDK-5** Throughput through the SDK SHOULD stay within 10% of the hand-written RemoteDevice
+  hosts on the same benchmark. Latency for a small stream during a bulk transfer MUST be measured,
+  since it has not been yet.
+
 ## 7. Configuration and defaults
 
-All values MUST be configurable per session.
+All values MUST be configurable. The first table is per session. The second is per SDK client or
+server.
 
 | Parameter | Default | Used by |
 |---|---|---|
@@ -406,6 +616,15 @@ All values MUST be configurable per session.
 Note: WebRTC messages are limited to 64 KiB (SCTP), so a header plus the largest payload must stay
 below that.
 
+| SDK parameter | Default | Used by |
+|---|---|---|
+| `inflight_limit` | 64 KiB | FR-SDK-4 |
+| `reconnect_backoff` | 0.5, 1, 2, 4, 8 s, then 8 s | FR-CLI-2 |
+| `connect_timeout` | 10 s | FR-CLI-4 |
+| `grace_period` | 120 s | FR-SRV-5 |
+| `max_sessions` | 1024 (D19) | FR-SRV-6 |
+| `max_read_buffer` | 16 MiB (D17) | FR-AST-5 |
+
 ## 8. Known limitations (accepted for this version)
 
 - **No per-stream receive backpressure.** Without credit flow control, a host can only slow a peer
@@ -418,6 +637,12 @@ below that.
   See ROADMAP.md §2.
 - **Unknown progress after connection loss.** As in v1, a `TRANSPORT_LOST` stream gives no
   indication of which data reached the peer. See ROADMAP.md §2.
+- **A consumer that falls far behind loses its stream.** Without credit flow control, the only ways
+  to bound a read buffer are to stall every stream or to reset the slow one. The SDK resets it
+  (FR-AST-5, D17). A transfer whose consumer falls `max_read_buffer` behind fails, and is not slowed
+  down, until credit exists (ROADMAP.md §4).
+- **Reconnect does not hide a lost connection.** The session survives, but its streams end with
+  `TRANSPORT_LOST`, and the consumer opens new ones.
 
 ## 9. Verification
 
@@ -433,6 +658,11 @@ below that.
 | Leaks (FR-STR-15) | 10 000 open/close cycles end with empty registry and queues |
 | Interop | Two library sessions back to back in memory; Python binding ↔ JS binding over a real WebSocket |
 | Portability (NFR-PORT) | CI builds on every target in NFR-PORT-3, including Emscripten |
+| SDK behaviour (FR-SDK, FR-CLI, FR-SRV, FR-AST) | The same async scenarios, run in Python and TypeScript over the in-memory Transport (FR-CONF-3) |
+| Transport contract (FR-TP) | The transport layer of the suite, run against the in-memory Transport and a real WebSocket |
+| Cross-language | SDK client and server, Python ↔ TypeScript in both directions, over a real WebSocket |
+| Suite quality (FR-CONF-8) | Deliberate bugs injected into the binding and the SDK are caught |
+| Specs are enough (Intent, other languages) | A fresh agent writes a small binding in a third language from the docs and the suite alone. Each time it has to read the C++ source is a gap in the specs, and is fixed |
 
 ## 10. Decisions
 
@@ -442,7 +672,7 @@ below that.
 | D2 | Test framework | GoogleTest via `FetchContent`, tests only (NFR-PORT-7) |
 | D3 | Where bindings live | This repository, `bindings/<language>/` (NFR-MNT-3) |
 | D4 | Byte-stream transports | Optional length-prefix framer in the library (§5.11) |
-| D5 | Reconnect grace period | Host decides; the library only keeps session state (§2.2) |
+| D5 | Reconnect grace period | The core only keeps session state. The SDK runs the timer, and the consumer sets its length (§2.2, D13) |
 | D6 | v1/v2 side by side | Not needed; backend and web frontend deploy together (FR-WIRE-7) |
 | D7 | Flow control and priority | Not in v2 initial: round-robin plus bounded queues only (§5.5, §5.6) |
 | D8 | How the protocol evolves | Keep each version minimal. Any wire change either raises the protocol version (v2 → v3) or, before a version is released, changes this spec and the code together. No in-band feature negotiation |
@@ -450,6 +680,22 @@ below that.
 | D10 | Delivery | In milestones, one agent task each (§11). Future layers are in `ROADMAP.md` |
 | D11 | `kind` and `session_id` format | ASCII `[a-zA-Z0-9-]` only, not free UTF-8 (FR-WIRE-4b) |
 | D12 | State machine structure | State pattern for sessions and streams: one class per state, handlers return the next state, and only the state machine applies it (`docs/design/M2_SESSION_CORE.md` §3) |
+
+Added for the SDK (2026-10-31):
+
+| # | Question | Decision |
+|---|---|---|
+| D13 | Where the async layer lives | In PacketMux, one SDK per language. This reverses `M4_BINDINGS.md`, which left it to the consumer |
+| D14 | Import path | Async at the top level of each package, sync binding under a separate import (FR-SDK-2) |
+| D15 | Reconnect | In the SDK, on by default, through the dial function. There is no attempt limit: it retries until closed, until the dial function gives up, or until the peer sends `GOAWAY` (FR-CLI-2, FR-CLI-3) |
+| D16 | Which roles each SDK has | Client and server in both languages (FR-SRV-8) |
+| D17 | A read buffer past its limit | Reset that stream and leave the others alone. The default is 16 MiB, to be checked against real transfers before release (FR-AST-5, §8) |
+| D18 | Data buffered when a reset arrives | The read fails at once and the buffer is dropped. A reset means abort, and both RemoteDevice hosts behave this way today (FR-AST-4) |
+| D19 | SDK defaults | `reconnect_backoff`, `inflight_limit`, `connect_timeout` and `grace_period` keep RemoteDevice's current values. `max_sessions` is new, because nothing bounds sessions today, and 1024 is a starting value |
+| D20 | Packaging | Installing the SDK MUST NOT need `PYTHONPATH` or an environment variable, or "one import" is not true. Python ships as a distributable wheel with the native library inside it, installable with `pip` and usable as a dependency in any `pyproject.toml`. TypeScript ships as an npm package with the WASM inside it. A macOS wheel and the npm package come with the SDK. Linux and Windows wheels follow when those builds exist, because a wheel with native code is built per platform |
+| D21 | Who generates the session ID | Always the SDK. An ID chosen by a consumer is fragile: reusing one after a restart restarts the stream IDs on a live server session, which is a protocol error (FR-STR-2, FR-STR-4), and a guessable ID is easier to take over. A restarted client is a new session (FR-CLI-1a) |
+| D22 | A re-dial for a session the server no longer has | It fails, and the consumer connects again for a new session. The server never recreates a session under an ID a client is resuming, so the client's stream ID state always matches a real peer. The two `HELLO`s look the same today, so `HELLO` gains `resuming`, and `SESSION_NOT_FOUND` is added. v2 is unreleased, so this changes v2 itself (D8) (FR-HS-7, FR-CLI-4a, FR-SRV-9) |
+| D23 | Stream params in the SDK | Typed, declared once per language, and encoded as JSON, with validators of our own and no schema library. Raw `bytes` stay available. The wire stays bytes (FR-AST-8, FR-AST-9) |
 
 ## 11. Delivery milestones
 
@@ -463,4 +709,12 @@ A milestone is done when its exit criteria pass. The next milestone builds only 
 | M3 | C ABI over the C++ API | FR-API-4/5, NFR-MNT-2 | A test compiled as C drives the full session and stream lifecycle through the ABI alone. Protocol details stay covered by the M2 tests |
 | M4 | Bindings: Python (`bindings/python/`) and JS/WASM (`bindings/js/`); Emscripten build | NFR-PORT-3/6 | Golden vectors pass in both bindings; Python ↔ JS interop over a real WebSocket |
 | M5 | Length-prefix framer, fuzzing, sanitizers, performance and size targets | FR-LPF-\*, NFR-SEC-3/4, NFR-PERF-\* | Framer split-point tests pass; fuzzers run clean; NFR-PERF targets measured and met (or the targets revised) |
+| M6 | `HELLO.resuming` and `SESSION_NOT_FOUND` in the core; protocol spec, binding spec, and the vectors and sync layers of the conformance suite | FR-HS-7, FR-FRAME-5, FR-CONF-1/2/3/4/7 | The core and both bindings pass both layers from `conformance/` |
+| M7 | SDK in Python and TypeScript: Transport, client, server, async streams, typed params, packaging; params, async and transport layers of the suite | FR-SDK-\*, FR-TP-\*, FR-CLI-\*, FR-SRV-\*, FR-AST-\*, FR-CONF-\*, NFR-SDK-\* | Both SDKs pass the whole suite; injected bugs are caught; Python ↔ TypeScript over a real WebSocket in both directions; the README example runs from an installed package |
+| M8 | Third-language check | Intent, other languages | A small binding passes the vectors and sync layers from the docs alone, and every gap found is fixed in the specs |
+
+The order is M6, M7, M5, then M8 as needed. M5 is a tuning phase and can wait until the SDK is
+stable. Consumers move to the SDK after M7, and that work belongs to each consumer. M5 and the Linux
+and Windows builds have to finish before PacketMux goes into RemoteDevice's `main`: a native crash
+now takes down the backend process, where it used to be a Python exception.
 

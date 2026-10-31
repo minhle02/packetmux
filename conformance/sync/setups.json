@@ -1,0 +1,8 @@
+{
+  "disconnected": [],
+  "handshaking": [{"op": "attach"}, {"op": "drain"}],
+  "established": [{"op": "attach"}, {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}}, {"op": "drain"}],
+  "draining": [{"op": "attach"}, {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}}, {"op": "drain"}, {"op": "rx", "wire": "ff"}, {"op": "drain_events"}],
+  "closing": [{"op": "attach"}, {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}}, {"op": "drain"}, {"op": "close", "code": "OK"}, {"op": "drain_events"}],
+  "closed": [{"op": "attach"}, {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}}, {"op": "drain"}, {"op": "lost"}, {"op": "close", "code": "OK"}, {"op": "drain"}]
+}

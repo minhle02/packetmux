@@ -1,0 +1,59 @@
+{
+  "scenarios": [
+    {"name": "ping-after-the-interval", "requirement": "FR-KA-1", "role": "client", "setup": "established", "steps": [
+      {"op": "expect_deadline", "ms": 15000},
+      {"op": "advance", "ms": 14999},
+      {"op": "tick"},
+      {"op": "expect_frames", "frames": []},
+      {"op": "advance", "ms": 1},
+      {"op": "tick"},
+      {"op": "expect_frames", "frames": [{"type": "PING"}]},
+      {"op": "expect_deadline", "ms": 15000}
+    ]},
+    {"name": "no-ping-while-disconnected", "requirement": "FR-KA-1", "role": "client", "steps": [
+      {"op": "expect_deadline", "ms": null}
+    ]},
+    {"name": "ping-is-answered-with-the-same-nonce", "requirement": "FR-KA-2", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1234567}},
+      {"op": "expect_frames", "frames": [{"type": "PONG", "nonce": 1234567}]}
+    ]},
+    {"name": "rtt-comes-from-the-matching-pong", "requirement": "FR-KA-3", "role": "client", "setup": "established", "steps": [
+      {"op": "expect_rtt", "ms": null},
+      {"op": "advance", "ms": 15000},
+      {"op": "tick"},
+      {"op": "expect_frames", "frames": [{"type": "PING"}]},
+      {"op": "advance", "ms": 25},
+      {"op": "rx", "frame": {"type": "PONG", "nonce": "last"}},
+      {"op": "expect_rtt", "ms": 25}
+    ]},
+    {"name": "an-unknown-pong-is-ignored", "requirement": "FR-KA-3", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "PONG", "nonce": 99999}},
+      {"op": "expect_rtt", "ms": null},
+      {"op": "expect_state", "state": "ESTABLISHED"}
+    ]},
+    {"name": "silence-ends-the-connection", "requirement": "FR-KA-4", "role": "client", "setup": "established", "steps": [
+      {"op": "advance", "ms": 45000},
+      {"op": "tick"},
+      {"op": "drain_frames"},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "TIMEOUT"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"}
+    ]},
+    {"name": "silence-is-measured-from-the-last-frame", "requirement": "FR-KA-4", "role": "client", "setup": "established", "steps": [
+      {"op": "advance", "ms": 44999},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 9, "data": "aa"}},
+      {"op": "tick"},
+      {"op": "drain_frames"},
+      {"op": "advance", "ms": 44999},
+      {"op": "tick"},
+      {"op": "drain_frames"},
+      {"op": "expect_state", "state": "ESTABLISHED"},
+      {"op": "advance", "ms": 1},
+      {"op": "tick"},
+      {"op": "drain_frames"},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "TIMEOUT"}]}
+    ]},
+    {"name": "the-intervals-are-configurable", "requirement": "FR-KA-1", "role": "client", "setup": "established", "config": {"ping_interval_ms": 100, "dead_after_ms": 300}, "steps": [
+      {"op": "expect_deadline", "ms": 100}
+    ]}
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "scenarios": [
+    {"name": "lost-writable-when-a-full-queue-is-dropped", "requirement": "FR-BP-2", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 100, "max_queued_bytes": 100}, "steps": [
+      {"op": "open", "kind": "a", "expect_id": 1},
+      {"op": "open", "kind": "b", "expect_id": 3},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 100}, "expect_accepted": 100},
+      {"op": "write", "stream": 3, "data": {"repeat": "ab", "count": 10}, "expect_accepted": 0},
+      {"op": "reset", "stream": 1, "code": "KILLED"},
+      {"op": "drain_frames"},
+      {"op": "expect_events", "events": [{"type": "WRITABLE", "stream_id": 3}, {"type": "STREAM_CLOSED", "stream_id": 1, "code": "KILLED"}]}
+    ]},
+    {"name": "connection-lost-after-a-keepalive-timeout", "requirement": "Regression: README host loop", "role": "client", "setup": "established", "steps": [
+      {"op": "advance", "ms": 45000},
+      {"op": "tick"},
+      {"op": "drain"},
+      {"op": "lost"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "expect_frames", "frames": []},
+      {"op": "expect_events", "events": []}
+    ]},
+    {"name": "connection-lost-after-a-protocol-error", "requirement": "Regression: README host loop", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "wire": "ff"},
+      {"op": "drain"},
+      {"op": "lost"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "expect_frames", "frames": []},
+      {"op": "expect_events", "events": []}
+    ]},
+    {"name": "connection-lost-after-a-local-close", "requirement": "Regression: README host loop", "role": "client", "setup": "established", "steps": [
+      {"op": "close", "code": "OK"},
+      {"op": "drain"},
+      {"op": "lost"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "expect_frames", "frames": []},
+      {"op": "expect_events", "events": []}
+    ]},
+    {"name": "connection-lost-after-goaway", "requirement": "Regression: README host loop", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "GOAWAY", "code": "OK"}},
+      {"op": "drain"},
+      {"op": "lost"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "expect_frames", "frames": []},
+      {"op": "expect_events", "events": []}
+    ]},
+    {"name": "events-pending-refuses-the-next-message", "requirement": "FR-API-5", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "drain_frames"},
+      {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}, "expect_status": "EVENTS_PENDING"},
+      {"op": "expect_frames", "frames": []},
+      {"op": "expect_events", "events": [{"type": "CONNECTED", "peer_session_id": "peer-1"}]},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "expect_frames", "frames": [{"type": "PONG", "nonce": 1}]}
+    ]},
+    {"name": "events-pending-after-poll-transmit", "requirement": "FR-API-5", "role": "client", "setup": "established", "config": {"max_queued_bytes_per_stream": 100, "max_queued_bytes": 1000}, "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 101}, "expect_accepted": 100},
+      {"op": "drain_frames"},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}, "expect_status": "EVENTS_PENDING"},
+      {"op": "expect_events", "events": [{"type": "WRITABLE", "stream_id": 1}]},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "expect_frames", "frames": [{"type": "PONG", "nonce": 1}]}
+    ]}
+  ]
+}

@@ -41,6 +41,14 @@ TEST(CodecRoundTripTest, Hello) {
   EXPECT_EQ(decoded.version, PROTOCOL_VERSION);
   EXPECT_EQ(decoded.sessionId, "session-1");
   expectSameBytes(decoded.capabilities, SAMPLE_BYTES);
+  EXPECT_FALSE(decoded.resuming);
+}
+
+TEST(CodecRoundTripTest, HelloResuming) {
+  FrameView decoded;
+  roundTrip({.type = FRAME_TYPE_HELLO, .resuming = true, .sessionId = "s"},
+            &decoded);
+  EXPECT_TRUE(decoded.resuming);
 }
 
 TEST(CodecRoundTripTest, Open) {

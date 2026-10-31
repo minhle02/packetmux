@@ -20,6 +20,6 @@ export const STREAM_INFO = {
 };
 
 export const FRAME = {
-  size: 72, type: 0, streamId: 4, version: 8, sessionId: 12, capabilities: 20, kind: 28, params: 36,
+  size: 72, type: 0, streamId: 4, version: 8, resuming: 10, sessionId: 12, capabilities: 20, kind: 28, params: 36,
   code: 44, message: 48, data: 56, nonce: 64,
 };

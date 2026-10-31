@@ -1,0 +1,205 @@
+{
+  "scenarios": [
+    {"name": "client-ids-are-odd-and-increase", "requirement": "FR-STR-1", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "a", "expect_id": 1},
+      {"op": "open", "kind": "b", "expect_id": 3},
+      {"op": "drain"}
+    ]},
+    {"name": "server-ids-are-even-and-increase", "requirement": "FR-STR-1", "role": "server", "setup": "established", "steps": [
+      {"op": "open", "kind": "a", "expect_id": 2},
+      {"op": "open", "kind": "b", "expect_id": 4},
+      {"op": "drain"}
+    ]},
+    {"name": "ids-are-not-reused-across-reconnects", "requirement": "FR-STR-2", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "a", "expect_id": 1},
+      {"op": "lost"},
+      {"op": "drain"},
+      {"op": "attach"},
+      {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}},
+      {"op": "drain"},
+      {"op": "open", "kind": "a", "expect_id": 3},
+      {"op": "drain"}
+    ]},
+    {"name": "open-carries-kind-and-params", "requirement": "FR-STR-5", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "tcp-forward", "params": "7b7d"},
+      {"op": "expect_frames", "frames": [{"type": "OPEN", "stream_id": 1, "kind": "tcp-forward", "params": "7b7d"}]},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "kind": "tcp-forward", "state": "SENDER_OPENING"}]}
+    ]},
+    {"name": "pipelined-data-and-eof-follow-open", "requirement": "FR-STR-5", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "write", "stream": 1, "data": "aabb", "expect_accepted": 2},
+      {"op": "eof", "stream": 1},
+      {"op": "expect_frames", "frames": [{"type": "OPEN", "stream_id": 1, "kind": "k"}, {"type": "DATA", "stream_id": 1, "data": "aabb"}, {"type": "EOF", "stream_id": 1}]}
+    ]},
+    {"name": "peer-open-is-reported", "requirement": "FR-STR-6", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k", "params": "01"}},
+      {"op": "expect_events", "events": [{"type": "STREAM_OPENED", "stream_id": 2, "kind": "k", "params": "01"}]}
+    ]},
+    {"name": "accept-sends-open-ok", "requirement": "FR-STR-6", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "accept", "stream": 2},
+      {"op": "expect_frames", "frames": [{"type": "OPEN_OK", "stream_id": 2}]}
+    ]},
+    {"name": "reject-sends-open-err", "requirement": "FR-STR-6", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "reject", "stream": 2, "code": "POLICY_DENIED", "message": "6e6f"},
+      {"op": "expect_frames", "frames": [{"type": "OPEN_ERR", "stream_id": 2, "code": "POLICY_DENIED", "message": "6e6f"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 2, "code": "POLICY_DENIED"}]}
+    ]},
+    {"name": "max-streams-rejects-an-inbound-open", "requirement": "FR-STR-6", "role": "client", "setup": "established", "config": {"max_streams": 1}, "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "a"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 4, "kind": "b"}},
+      {"op": "expect_frames", "frames": [{"type": "OPEN_ERR", "stream_id": 4, "code": "LIMIT_EXCEEDED"}]},
+      {"op": "expect_streams", "streams": [{"stream_id": 2}]}
+    ]},
+    {"name": "max-streams-refuses-a-local-open", "requirement": "FR-STR-6", "role": "client", "setup": "established", "config": {"max_streams": 1}, "steps": [
+      {"op": "open", "kind": "a"},
+      {"op": "open", "kind": "b", "expect_status": "LIMIT_EXCEEDED"},
+      {"op": "drain"}
+    ]},
+    {"name": "data-before-accept-is-delivered-after-the-open-event", "requirement": "FR-STR-7", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "expect_events", "events": [{"type": "STREAM_OPENED", "stream_id": 2, "kind": "k"}]},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 2, "data": "aa"}},
+      {"op": "expect_events", "events": [{"type": "DATA", "stream_id": 2, "data": "aa"}]},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "expect_events", "events": [{"type": "EOF", "stream_id": 2}]}
+    ]},
+    {"name": "frames-after-a-reject-are-dropped", "requirement": "FR-STR-7", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "reject", "stream": 2, "code": "POLICY_DENIED"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 2, "data": "aa"}},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 2}},
+      {"op": "expect_state", "state": "ESTABLISHED"}
+    ]},
+    {"name": "open-err-ends-the-stream-with-its-code", "requirement": "FR-STR-8", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "OPEN_ERR", "stream_id": 1, "code": "UNSUPPORTED_KIND"}},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "UNSUPPORTED_KIND"}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "clean-close-reports-ok", "requirement": "FR-STR-10", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "eof", "stream": 1},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "expect_events", "events": [{"type": "EOF", "stream_id": 1}, {"type": "STREAM_CLOSED", "stream_id": 1, "code": "OK"}]},
+      {"op": "expect_frames", "frames": [{"type": "EOF", "stream_id": 1}]},
+      {"op": "expect_streams", "streams": []}
+    ]},
+    {"name": "rst-ok-is-reported-as-peer-closed", "requirement": "FR-STR-10", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 1, "code": "OK"}},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PEER_CLOSED"}]}
+    ]},
+    {"name": "reset-with-ok-is-reported-as-peer-closed", "requirement": "FR-STR-10", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "reset", "stream": 1, "code": "OK"},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "OK"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PEER_CLOSED"}]}
+    ]},
+    {"name": "write-after-eof-fails-and-sends-nothing", "requirement": "FR-STR-11", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "eof", "stream": 1},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa", "expect_status": "INVALID_STATE"},
+      {"op": "expect_frames", "frames": []}
+    ]},
+    {"name": "write-to-an-unknown-stream", "requirement": "FR-STR-11", "role": "client", "setup": "established", "steps": [
+      {"op": "write", "stream": 9, "data": "aa", "expect_status": "UNKNOWN_STREAM"},
+      {"op": "expect_frames", "frames": []}
+    ]},
+    {"name": "data-after-peer-eof-resets-the-stream-only", "requirement": "FR-STR-12", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "aa"}},
+      {"op": "expect_frames", "frames": [{"type": "RST", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_state", "state": "ESTABLISHED"}
+    ]},
+    {"name": "frames-for-an-unknown-stream-are-ignored", "requirement": "FR-STR-13", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 9, "data": "aa"}},
+      {"op": "rx", "frame": {"type": "EOF", "stream_id": 9}},
+      {"op": "rx", "frame": {"type": "RST", "stream_id": 9, "code": "KILLED"}},
+      {"op": "expect_state", "state": "ESTABLISHED"}
+    ]},
+    {"name": "late-frames-after-a-reset-are-ignored", "requirement": "FR-STR-13", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "reset", "stream": 1, "code": "KILLED"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "aa"}},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "expect_state", "state": "ESTABLISHED"}
+    ]},
+    {"name": "reset-discards-queued-data", "requirement": "FR-STR-14", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "write", "stream": 1, "data": "aabb", "expect_accepted": 2},
+      {"op": "reset", "stream": 1, "code": "KILLED"},
+      {"op": "expect_frames", "frames": [{"type": "OPEN", "stream_id": 1, "kind": "k"}, {"type": "RST", "stream_id": 1, "code": "KILLED"}]},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 1, "code": "KILLED"}]}
+    ]},
+    {"name": "wrong-parity-open-is-a-protocol-error", "requirement": "FR-STR-4", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 1, "kind": "k"}},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "PROTOCOL_ERROR"}]}
+    ]},
+    {"name": "open-with-a-lower-id-is-a-protocol-error", "requirement": "FR-STR-4", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 4, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_frames"},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 4, "code": "TRANSPORT_LOST"}, {"type": "DISCONNECTED", "code": "PROTOCOL_ERROR"}]}
+    ]},
+    {"name": "reused-open-id-is-a-protocol-error", "requirement": "FR-STR-4", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "OPEN", "stream_id": 2, "kind": "k"}},
+      {"op": "drain_frames"},
+      {"op": "expect_events", "events": [{"type": "STREAM_CLOSED", "stream_id": 2, "code": "TRANSPORT_LOST"}, {"type": "DISCONNECTED", "code": "PROTOCOL_ERROR"}]}
+    ]},
+    {"name": "stream-counters", "requirement": "FR-SES-7", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aabb"},
+      {"op": "drain_frames"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "ccddee"}},
+      {"op": "drain_events"},
+      {"op": "expect_streams", "streams": [{"stream_id": 1, "opener": 0, "bytes_sent": 2, "bytes_received": 3}]}
+    ]},
+    {"name": "no-streams-while-disconnected", "requirement": "FR-SES-3", "role": "client", "steps": [
+      {"op": "open", "kind": "k", "expect_status": "NOT_CONNECTED"}
+    ]},
+    {"name": "a-large-write-is-split", "requirement": "FR-SCH-4", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 32001}, "expect_accepted": 32001},
+      {"op": "expect_frames", "frames": [{"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 16000}}, {"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 16000}}, {"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 1}}]}
+    ]},
+    {"name": "the-payload-limit-is-configurable", "requirement": "FR-FRAME-3", "role": "client", "setup": "established", "config": {"max_data_payload": 100}, "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 250}, "expect_accepted": 250},
+      {"op": "expect_frames", "frames": [{"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 100}}, {"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 100}}, {"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 50}}]}
+    ]}
+  ]
+}

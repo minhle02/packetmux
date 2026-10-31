@@ -1,11 +1,11 @@
-// The language-neutral vectors from tests/vectors/FramesV2.txt, through the binding.
+// The language-neutral vectors from conformance/vectors/frames.txt, through the binding.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { CodecError, CodecStatus, FrameType, Reason, loadPacketMux } from '../index.js';
 
-const text = readFileSync(new URL('../../../tests/vectors/FramesV2.txt', import.meta.url), 'utf8');
+const text = readFileSync(new URL('../../../conformance/vectors/frames.txt', import.meta.url), 'utf8');
 
 function loadVectors() {
   const vectors = [];
@@ -56,6 +56,7 @@ for (const { name, fields } of vectors) {
       type: FrameType[fields.type],
       streamId: Number(fields.stream_id),
       version: Number(fields.version ?? 2),
+      resuming: fields.resuming === '1',
       sessionId: Buffer.from(hexField(fields, 'session_id')).toString('ascii'),
       capabilities: hexField(fields, 'capabilities'),
       kind: Buffer.from(hexField(fields, 'kind')).toString('ascii'),

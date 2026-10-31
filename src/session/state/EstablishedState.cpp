@@ -8,6 +8,7 @@ EstablishedState::EstablishedState(SessionProcessor* const o_processor)
 SessionState EstablishedState::id() const { return SESSION_STATE_ESTABLISHED; }
 
 void EstablishedState::onEnter() {
+  m_processor->markEstablished();
   m_processor->keepAlive().reset(m_processor->nowMs());
 }
 

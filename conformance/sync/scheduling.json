@@ -1,0 +1,46 @@
+{
+  "scenarios": [
+    {"name": "control-goes-before-data", "requirement": "FR-SCH-1", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa"},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 7}},
+      {"op": "drain_events"},
+      {"op": "expect_frames", "frames": [{"type": "PONG", "nonce": 7}, {"type": "DATA", "stream_id": 1, "data": "aa"}]}
+    ]},
+    {"name": "control-frames-keep-their-order", "requirement": "FR-SCH-1", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "rx", "frame": {"type": "PING", "nonce": 2}},
+      {"op": "open", "kind": "k"},
+      {"op": "expect_frames", "frames": [{"type": "PONG", "nonce": 1}, {"type": "PONG", "nonce": 2}, {"type": "OPEN", "stream_id": 1, "kind": "k"}]}
+    ]},
+    {"name": "eof-stays-behind-its-data", "requirement": "FR-SCH-2", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": "aa"},
+      {"op": "eof", "stream": 1},
+      {"op": "expect_frames", "frames": [{"type": "DATA", "stream_id": 1, "data": "aa"}, {"type": "EOF", "stream_id": 1}]}
+    ]},
+    {"name": "streams-take-turns", "requirement": "FR-SCH-3", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "a", "expect_id": 1},
+      {"op": "open", "kind": "b", "expect_id": 3},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 1}},
+      {"op": "drain_events"},
+      {"op": "rx", "frame": {"type": "OPEN_OK", "stream_id": 3}},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 32000}},
+      {"op": "write", "stream": 3, "data": {"repeat": "ab", "count": 32000}},
+      {"op": "expect_frames", "frames": [{"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 16000}}, {"type": "DATA", "stream_id": 3, "data": {"repeat": "ab", "count": 16000}}, {"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 16000}}, {"type": "DATA", "stream_id": 3, "data": {"repeat": "ab", "count": 16000}}]}
+    ]},
+    {"name": "a-new-stream-joins-the-rotation", "requirement": "FR-SCH-3", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "a", "expect_id": 1},
+      {"op": "open", "kind": "b", "expect_id": 3},
+      {"op": "drain"},
+      {"op": "write", "stream": 1, "data": {"repeat": "ab", "count": 16000}},
+      {"op": "write", "stream": 3, "data": {"repeat": "ab", "count": 1}},
+      {"op": "expect_frames", "frames": [{"type": "DATA", "stream_id": 1, "data": {"repeat": "ab", "count": 16000}}, {"type": "DATA", "stream_id": 3, "data": "ab"}]}
+    ]}
+  ]
+}

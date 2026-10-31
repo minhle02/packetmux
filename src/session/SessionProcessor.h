@@ -42,6 +42,7 @@ class SessionProcessor {
                            const CodecStatus i_codecStatus = CODEC_STATUS_OK);
   void setCloseCode(const ReasonCode i_code);
   ReasonCode closeCode() const;
+  void markEstablished();  // later HELLOs say the session is resuming
 
   void emitConnected(const FrameView& i_frame);
   void emitDisconnected();
@@ -75,6 +76,7 @@ class SessionProcessor {
   ReasonCode m_disconnectCode;
   CodecStatus m_disconnectCodecStatus;
   ReasonCode m_closeCode;
+  bool m_hasEstablished = false;
   uint64_t m_nowMs;
 };
 

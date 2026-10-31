@@ -17,149 +17,26 @@ Not in M2: the C ABI (M3), bindings (M4), the length-prefix framer and fuzzing (
 
 ### 1.1 Session (connection lifecycle)
 
-A `Session` lives across reconnects, so `DISCONNECTED` is a normal resting state. It is not an
-error. `CLOSED` is the only final state.
-
-```mermaid
-stateDiagram-v2
-    [*] --> DISCONNECTED: new Session
-    DISCONNECTED --> HANDSHAKING: T1 attachConnection
-    HANDSHAKING --> ESTABLISHED: T2 peer HELLO accepted
-    HANDSHAKING --> DISCONNECTED: T3 lost or hello timeout
-    ESTABLISHED --> DISCONNECTED: T3 lost, dead_after, or control cap
-    HANDSHAKING --> DRAINING: T4 connection protocol error
-    ESTABLISHED --> DRAINING: T4 connection protocol error
-    DRAINING --> DISCONNECTED: T5 GOAWAY handed out, drain timeout, or lost
-    HANDSHAKING --> CLOSING: T6 close
-    ESTABLISHED --> CLOSING: T6 close
-    DRAINING --> CLOSING: T6 close
-    CLOSING --> CLOSED: T7 GOAWAY handed out, drain timeout, or lost
-    DISCONNECTED --> CLOSED: T8 close
-    ESTABLISHED --> CLOSED: T9 peer GOAWAY
-    CLOSED --> [*]
-```
-
-| State | Meaning | `openStream` | Inbound messages |
-|---|---|---|---|
-| `DISCONNECTED` | No connection. Session data and the stream ID counter are kept | refused | refused |
-| `HANDSHAKING` | Our `HELLO` is queued; waiting for the peer's | allowed (pipelined after `HELLO`) | only `HELLO` is valid |
-| `ESTABLISHED` | Normal operation; keepalive runs | allowed | dispatched |
-| `DRAINING` | The connection failed. Waiting for the host to take `GOAWAY`, then back to `DISCONNECTED` | refused | ignored |
-| `CLOSING` | The session is ending. Waiting for the host to take `GOAWAY`, then `CLOSED` | refused | ignored |
-| `CLOSED` | Final. Only `pollEvent` and read-only calls still do anything | refused | refused |
-
-**Transition table.** This is the specification for the state classes in §5.2, and the test oracle for
-`SessionLifecycleTest`. Each cell is what that state's handler does. "→ X" moves to state X, a status
-name is what the host gets back, and `-` means nothing happens.
-
-| State | attach | message | connection lost | tick | close | openStream | transmit drained |
-|---|---|---|---|---|---|---|---|
-| `DISCONNECTED` | → `HANDSHAKING` | `NOT_CONNECTED` | - | - | → `CLOSED` | `NOT_CONNECTED` | - |
-| `HANDSHAKING` | `ALREADY_CONNECTED` | → `ESTABLISHED`, or → `DRAINING` | → `DISCONNECTED` | timeout → `DISCONNECTED` | → `CLOSING` | opens | - |
-| `ESTABLISHED` | `ALREADY_CONNECTED` | dispatch, or → `DRAINING`, `DISCONNECTED`, `CLOSED` | → `DISCONNECTED` | ping, or dead → `DISCONNECTED` | → `CLOSING` | opens | - |
-| `DRAINING` | `ALREADY_CONNECTED` | ignored | → `DISCONNECTED` | timeout → `DISCONNECTED` | → `CLOSING` | `NOT_CONNECTED` | → `DISCONNECTED` |
-| `CLOSING` | `CLOSED` | ignored | → `CLOSED` | timeout → `CLOSED` | `CLOSED` | `CLOSED` | → `CLOSED` |
-| `CLOSED` | `CLOSED` | `CLOSED` | - | - | `CLOSED` | `CLOSED` | - |
-
-Rules that apply to all transitions:
-- A session reaches `DISCONNECTED` or `CLOSED` with **no streams and empty queues**.
-- `T3`, `T5`, `T7` and `T9` are how every connection ends, so the host always sees exactly one
-  `DISCONNECTED` or `SESSION_CLOSED` event for each attached connection.
-- The session never closes the transport. Those two events are the host's signal to do it.
+The session states, the transition table and their rules now live in `docs/spec/PROTOCOL.md` §4. The
+table is the specification for the state classes in §5.2, and the test oracle for
+`SessionLifecycleTest`. `T1` to `T9` below are the transitions in the spec's diagram.
 
 ### 1.2 Stream
 
-Every stream has exactly one explicit state, and one transition table decides what each state may
-do. There are no role checks and no "has the open finished?" flags. Opening is split by side:
+The stream states, the transition table and the closing rules now live in `docs/spec/PROTOCOL.md` §5.
+The table is the specification for the stream state classes in §5.5, and the test oracle for
+`StreamStateMachineTest`. `S1` to `S13` below are the transitions in the spec's diagram.
 
-- **Sender:** the side that sent `OPEN` (the spec's "opener").
-- **Receiver:** the side that received `OPEN` (the spec's "acceptor").
+The design reasoning stays here:
 
-The two sides accept completely different inputs while opening, so they share no opening state.
-
-| State | Meaning |
-|---|---|
-| `SENDER_OPENING` | We sent `OPEN` and wait for `OPEN_OK` or `OPEN_ERR`. We may pipeline `DATA` |
-| `SENDER_OPENING_EOF_SENT` | As above, and we also sent `EOF`, so writing is over |
-| `RECEIVER_OPENING` | The peer sent `OPEN` and the host has not answered. Inbound `DATA` is delivered |
-| `RECEIVER_OPENING_EOF_RECEIVED` | As above, and the peer also sent `EOF` |
-| `OPEN` | Accepted; both directions are open |
-| `HALF_CLOSED_LOCAL` | Accepted; we sent `EOF` |
-| `HALF_CLOSED_REMOTE` | Accepted; the peer sent `EOF` |
-| `CLOSED` | Over. The stream is erased from the registry and `STREAM_CLOSED` is emitted |
-
-The two `_EOF_` states exist because `adb` half-closes right after its request, so `EOF` can pass
-the end of opening. Without them, `HALF_CLOSED_LOCAL` would mean two different things depending on
-a hidden flag.
-
-```mermaid
-stateDiagram-v2
-    [*] --> SENDER_OPENING: S1 openStream
-    [*] --> RECEIVER_OPENING: S2 OPEN received
-    SENDER_OPENING --> OPEN: S3 OPEN_OK received
-    SENDER_OPENING --> SENDER_OPENING_EOF_SENT: S4 sendEof
-    SENDER_OPENING_EOF_SENT --> HALF_CLOSED_LOCAL: S5 OPEN_OK received
-    RECEIVER_OPENING --> OPEN: S6 acceptStream
-    RECEIVER_OPENING --> RECEIVER_OPENING_EOF_RECEIVED: S7 EOF received
-    RECEIVER_OPENING_EOF_RECEIVED --> HALF_CLOSED_REMOTE: S8 acceptStream
-    OPEN --> HALF_CLOSED_LOCAL: S9 sendEof
-    OPEN --> HALF_CLOSED_REMOTE: S10 EOF received
-    HALF_CLOSED_LOCAL --> CLOSED: S11 EOF received, clean
-    HALF_CLOSED_REMOTE --> CLOSED: S12 sendEof, clean
-    SENDER_OPENING --> CLOSED: S13 abort
-    SENDER_OPENING_EOF_SENT --> CLOSED: S13 abort
-    RECEIVER_OPENING --> CLOSED: S13 abort
-    RECEIVER_OPENING_EOF_RECEIVED --> CLOSED: S13 abort
-    OPEN --> CLOSED: S13 abort
-    HALF_CLOSED_LOCAL --> CLOSED: S13 abort
-    HALF_CLOSED_REMOTE --> CLOSED: S13 abort
-    CLOSED --> [*]
-```
-
-**Transition table.** Each cell is the next state. `=` means the state does not change, and `·` means
-the input is invalid in that state.
-
-| State | `OPEN_OK` rx | `OPEN_ERR` rx | `DATA` rx | `EOF` rx | `RST` rx | accept | reject | write | sendEof | reset |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `SENDER_OPENING` | `OPEN` | `CLOSED` | · | · | `CLOSED` | · | · | = | `SENDER_OPENING_EOF_SENT` | `CLOSED` |
-| `SENDER_OPENING_EOF_SENT` | `HALF_CLOSED_LOCAL` | `CLOSED` | · | · | `CLOSED` | · | · | · | · | `CLOSED` |
-| `RECEIVER_OPENING` | · | · | = | `RECEIVER_OPENING_EOF_RECEIVED` | `CLOSED` | `OPEN` | `CLOSED` | · | · | `CLOSED` |
-| `RECEIVER_OPENING_EOF_RECEIVED` | · | · | · | · | `CLOSED` | `HALF_CLOSED_REMOTE` | `CLOSED` | · | · | `CLOSED` |
-| `OPEN` | · | · | = | `HALF_CLOSED_REMOTE` | `CLOSED` | · | · | = | `HALF_CLOSED_LOCAL` | `CLOSED` |
-| `HALF_CLOSED_LOCAL` | · | · | = | `CLOSED` | `CLOSED` | · | · | · | · | `CLOSED` |
-| `HALF_CLOSED_REMOTE` | · | · | · | · | `CLOSED` | · | · | = | `CLOSED` | `CLOSED` |
-
-Reading the table:
-- This table is the specification for the stream state classes in §5.5, and the test oracle for
-  `StreamStateMachineTest`.
-- An invalid frame calls `failStream` (`RST(PROTOCOL_ERROR)`). An invalid host call returns
-  `SESSION_STATUS_INVALID_STATE`. Neither changes the state.
-- The sender and receiver rows have **no valid input in common** except `RST` and reset, so their
-  logic lives in different classes: only sender states implement `onOpenOk` and `onOpenErr`, and only
+- There are no role checks and no "has the open finished?" flags. Opening is split by side, because
+  the two sides accept completely different inputs while opening, so they share no opening state.
+- The two `_EOF_` states exist because `adb` half-closes right after its request, so `EOF` can pass the
+  end of opening. Without them, `HALF_CLOSED_LOCAL` would mean two different things depending on a
+  hidden flag.
+- The sender and receiver rows have no valid input in common except `RST` and reset, so their logic
+  lives in different classes: only sender states implement `onOpenOk` and `onOpenErr`, and only
   receiver states implement `onAccept` and `onReject`.
-- `DATA` and `EOF` are invalid in the sender rows. The receiver cannot write before it accepts, and
-  `OPEN_OK` is a control frame that goes out first, so they cannot legally arrive before `OPEN_OK`.
-- The end of a connection or session closes a stream from every state, so it is not a column.
-
-`S13 abort` covers every unclean end, with the reason code the host sees in `STREAM_CLOSED`:
-
-| Cause | Reason code |
-|---|---|
-| `RST` received | the received code (`OK` becomes `PEER_CLOSED`) |
-| `resetStream(code)` called | `code` (`OK` becomes `PEER_CLOSED`) |
-| `OPEN_ERR` received | the received code |
-| `rejectStream(code, ...)` called | `code` |
-| A frame invalid for the stream's state | `PROTOCOL_ERROR` |
-| The connection ends | `TRANSPORT_LOST` |
-| The session ends | the session's code (`OK` becomes `PEER_CLOSED`) |
-
-So **`STREAM_CLOSED` carries `OK` only for a clean close** (`S11`, `S12`).
-
-Rules:
-- Every stream gets exactly one `STREAM_CLOSED`.
-- Clean close does not drop our queued `DATA`/`EOF`. Those frames stay in the scheduler and still go
-  out, so `STREAM_CLOSED` can come before our last byte reaches the wire. Only an abort discards
-  them.
 
 ### 1.3 State machine audit
 

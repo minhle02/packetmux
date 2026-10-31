@@ -37,7 +37,7 @@ Options: `--build-type Debug|Release|RelWithDebInfo|MinSizeRel` (default `Releas
 To run the tests:
 
 ```sh
-# C++
+# C++, including the conformance suite
 cmake -S . -B build/tests
 cmake --build build/tests --parallel
 ctest --test-dir build/tests
@@ -48,6 +48,9 @@ ctest --test-dir build/tests
 # JS (build the wasm target first)
 (cd bindings/js && npm test)
 ```
+
+To add another language, start with `docs/spec/BINDING.md`. `docs/spec/PROTOCOL.md` defines the
+protocol, and `conformance/` tests it.
 
 ## How to integrate the library
 

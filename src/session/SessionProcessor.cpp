@@ -64,6 +64,7 @@ CodecStatus SessionProcessor::decode(const std::span<const uint8_t> i_message,
 
 void SessionProcessor::queueHello() {
   queueControl({.type = FRAME_TYPE_HELLO,
+                .resuming = m_hasEstablished,
                 .sessionId = m_config.sessionId,
                 .capabilities = m_config.capabilities});
 }
@@ -91,6 +92,8 @@ void SessionProcessor::setCloseCode(const ReasonCode i_code) {
 }
 
 ReasonCode SessionProcessor::closeCode() const { return m_closeCode; }
+
+void SessionProcessor::markEstablished() { m_hasEstablished = true; }
 
 void SessionProcessor::emitConnected(const FrameView& i_frame) {
   m_events.push({.type = EVENT_TYPE_CONNECTED,

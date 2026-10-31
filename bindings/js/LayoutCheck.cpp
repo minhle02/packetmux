@@ -56,6 +56,7 @@ static_assert(sizeof(packetmux_frame_t) == 72U);
 static_assert(offsetof(packetmux_frame_t, type) == 0U);
 static_assert(offsetof(packetmux_frame_t, stream_id) == 4U);
 static_assert(offsetof(packetmux_frame_t, version) == 8U);
+static_assert(offsetof(packetmux_frame_t, resuming) == 10U);
 static_assert(offsetof(packetmux_frame_t, session_id) == 12U);
 static_assert(offsetof(packetmux_frame_t, capabilities) == 20U);
 static_assert(offsetof(packetmux_frame_t, kind) == 28U);

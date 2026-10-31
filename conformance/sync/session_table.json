@@ -1,0 +1,220 @@
+{
+  "scenarios": [
+    {"name": "session-disconnected-attach", "requirement": "PROTOCOL session table", "role": "client", "setup": "disconnected", "steps": [
+      {"op": "attach"},
+      {"op": "expect_state", "state": "HANDSHAKING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-disconnected-message", "requirement": "PROTOCOL session table", "role": "client", "setup": "disconnected", "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}, "expect_status": "NOT_CONNECTED"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-disconnected-lost", "requirement": "PROTOCOL session table", "role": "client", "setup": "disconnected", "steps": [
+      {"op": "lost"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-disconnected-tick", "requirement": "PROTOCOL session table", "role": "client", "setup": "disconnected", "steps": [
+      {"op": "advance", "ms": 1000000},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-disconnected-close", "requirement": "PROTOCOL session table", "role": "client", "setup": "disconnected", "steps": [
+      {"op": "close", "code": "OK"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-disconnected-open", "requirement": "PROTOCOL session table", "role": "client", "setup": "disconnected", "steps": [
+      {"op": "open", "kind": "kind", "expect_status": "NOT_CONNECTED"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-disconnected-drained", "requirement": "PROTOCOL session table", "role": "client", "setup": "disconnected", "steps": [
+      {"op": "drain_frames"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-handshaking-attach", "requirement": "PROTOCOL session table", "role": "client", "setup": "handshaking", "steps": [
+      {"op": "attach", "expect_status": "ALREADY_CONNECTED"},
+      {"op": "expect_state", "state": "HANDSHAKING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-handshaking-message", "requirement": "PROTOCOL session table", "role": "client", "setup": "handshaking", "steps": [
+      {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}},
+      {"op": "expect_state", "state": "ESTABLISHED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-handshaking-lost", "requirement": "PROTOCOL session table", "role": "client", "setup": "handshaking", "steps": [
+      {"op": "lost"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-handshaking-tick", "requirement": "PROTOCOL session table", "role": "client", "setup": "handshaking", "steps": [
+      {"op": "advance", "ms": 1000000},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-handshaking-close", "requirement": "PROTOCOL session table", "role": "client", "setup": "handshaking", "steps": [
+      {"op": "close", "code": "OK"},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-handshaking-open", "requirement": "PROTOCOL session table", "role": "client", "setup": "handshaking", "steps": [
+      {"op": "open", "kind": "kind"},
+      {"op": "expect_state", "state": "HANDSHAKING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-handshaking-drained", "requirement": "PROTOCOL session table", "role": "client", "setup": "handshaking", "steps": [
+      {"op": "drain_frames"},
+      {"op": "expect_state", "state": "HANDSHAKING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-established-attach", "requirement": "PROTOCOL session table", "role": "client", "setup": "established", "steps": [
+      {"op": "attach", "expect_status": "ALREADY_CONNECTED"},
+      {"op": "expect_state", "state": "ESTABLISHED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-established-message", "requirement": "PROTOCOL session table", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "expect_state", "state": "ESTABLISHED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-established-lost", "requirement": "PROTOCOL session table", "role": "client", "setup": "established", "steps": [
+      {"op": "lost"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-established-tick", "requirement": "PROTOCOL session table", "role": "client", "setup": "established", "steps": [
+      {"op": "advance", "ms": 1000000},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-established-close", "requirement": "PROTOCOL session table", "role": "client", "setup": "established", "steps": [
+      {"op": "close", "code": "OK"},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-established-open", "requirement": "PROTOCOL session table", "role": "client", "setup": "established", "steps": [
+      {"op": "open", "kind": "kind"},
+      {"op": "expect_state", "state": "ESTABLISHED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-established-drained", "requirement": "PROTOCOL session table", "role": "client", "setup": "established", "steps": [
+      {"op": "drain_frames"},
+      {"op": "expect_state", "state": "ESTABLISHED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-draining-attach", "requirement": "PROTOCOL session table", "role": "client", "setup": "draining", "steps": [
+      {"op": "attach", "expect_status": "ALREADY_CONNECTED"},
+      {"op": "expect_state", "state": "DRAINING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-draining-message", "requirement": "PROTOCOL session table", "role": "client", "setup": "draining", "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "expect_state", "state": "DRAINING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-draining-lost", "requirement": "PROTOCOL session table", "role": "client", "setup": "draining", "steps": [
+      {"op": "lost"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-draining-tick", "requirement": "PROTOCOL session table", "role": "client", "setup": "draining", "steps": [
+      {"op": "advance", "ms": 1000000},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-draining-close", "requirement": "PROTOCOL session table", "role": "client", "setup": "draining", "steps": [
+      {"op": "close", "code": "OK"},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-draining-open", "requirement": "PROTOCOL session table", "role": "client", "setup": "draining", "steps": [
+      {"op": "open", "kind": "kind", "expect_status": "NOT_CONNECTED"},
+      {"op": "expect_state", "state": "DRAINING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-draining-drained", "requirement": "PROTOCOL session table", "role": "client", "setup": "draining", "steps": [
+      {"op": "drain_frames"},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closing-attach", "requirement": "PROTOCOL session table", "role": "client", "setup": "closing", "steps": [
+      {"op": "attach", "expect_status": "CLOSED"},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closing-message", "requirement": "PROTOCOL session table", "role": "client", "setup": "closing", "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closing-lost", "requirement": "PROTOCOL session table", "role": "client", "setup": "closing", "steps": [
+      {"op": "lost"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closing-tick", "requirement": "PROTOCOL session table", "role": "client", "setup": "closing", "steps": [
+      {"op": "advance", "ms": 1000000},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closing-close", "requirement": "PROTOCOL session table", "role": "client", "setup": "closing", "steps": [
+      {"op": "close", "code": "OK", "expect_status": "CLOSED"},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closing-open", "requirement": "PROTOCOL session table", "role": "client", "setup": "closing", "steps": [
+      {"op": "open", "kind": "kind", "expect_status": "CLOSED"},
+      {"op": "expect_state", "state": "CLOSING"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closing-drained", "requirement": "PROTOCOL session table", "role": "client", "setup": "closing", "steps": [
+      {"op": "drain_frames"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closed-attach", "requirement": "PROTOCOL session table", "role": "client", "setup": "closed", "steps": [
+      {"op": "attach", "expect_status": "CLOSED"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closed-message", "requirement": "PROTOCOL session table", "role": "client", "setup": "closed", "steps": [
+      {"op": "rx", "frame": {"type": "PING", "nonce": 1}, "expect_status": "CLOSED"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closed-lost", "requirement": "PROTOCOL session table", "role": "client", "setup": "closed", "steps": [
+      {"op": "lost"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closed-tick", "requirement": "PROTOCOL session table", "role": "client", "setup": "closed", "steps": [
+      {"op": "advance", "ms": 1000000},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closed-close", "requirement": "PROTOCOL session table", "role": "client", "setup": "closed", "steps": [
+      {"op": "close", "code": "OK", "expect_status": "CLOSED"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closed-open", "requirement": "PROTOCOL session table", "role": "client", "setup": "closed", "steps": [
+      {"op": "open", "kind": "kind", "expect_status": "CLOSED"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]},
+    {"name": "session-closed-drained", "requirement": "PROTOCOL session table", "role": "client", "setup": "closed", "steps": [
+      {"op": "drain_frames"},
+      {"op": "expect_state", "state": "CLOSED"},
+      {"op": "drain"}
+    ]}
+  ]
+}

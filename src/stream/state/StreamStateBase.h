@@ -30,8 +30,8 @@ struct StreamContext {
 /**
  * One stream state. The defaults answer the 50 table cells that are the same
  * everywhere: an input a state does not override is invalid, and RST and reset
- * behave the same in all states. See docs/design/M2_SESSION_CORE.md
- * section 1.2.
+ * behave the same in all states. See docs/spec/PROTOCOL.md
+ * section 5.3.
  *
  * States hold no data and are const: all stream data is in StreamContext.
  */

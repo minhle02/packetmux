@@ -16,6 +16,7 @@ namespace {
 constexpr size_t REASON_PAYLOAD_SIZE = 1U;
 constexpr size_t NONCE_PAYLOAD_SIZE = 8U;
 constexpr size_t VERSION_FIELD_SIZE = 2U;
+constexpr size_t RESUMING_FIELD_SIZE = 1U;
 constexpr size_t ID_LENGTH_FIELD_SIZE = 2U;
 constexpr size_t OPAQUE_LENGTH_FIELD_SIZE = 4U;
 constexpr size_t REASON_FIELD_SIZE = 1U;
@@ -101,6 +102,14 @@ CodecStatus readHello(ByteReader* const o_reader, FrameView* const o_frame) {
   if (o_frame->version != PROTOCOL_VERSION) {
     return CODEC_STATUS_UNSUPPORTED_VERSION;
   }
+  uint8_t resuming = 0U;
+  if (!o_reader->readU8(&resuming)) {
+    return CODEC_STATUS_TRUNCATED;
+  }
+  if (resuming > 1U) {
+    return CODEC_STATUS_BAD_FLAG;
+  }
+  o_frame->resuming = resuming == 1U;
   const CodecStatus status = readIdentifier(o_reader, &o_frame->sessionId);
   if (status != CODEC_STATUS_OK) {
     return status;
@@ -233,7 +242,7 @@ CodecStatus validateForEncode(const FrameView& i_frame,
       }
       if (!fitsOpaqueLength(i_frame.capabilities) ||
           !fitsControlPayload(
-              VERSION_FIELD_SIZE + ID_LENGTH_FIELD_SIZE +
+              VERSION_FIELD_SIZE + RESUMING_FIELD_SIZE + ID_LENGTH_FIELD_SIZE +
                   OPAQUE_LENGTH_FIELD_SIZE,
               {i_frame.sessionId.size(), i_frame.capabilities.size()},
               i_limits)) {
@@ -293,6 +302,7 @@ void writePayload(const FrameView& i_frame, std::vector<uint8_t>* const o_out) {
   switch (i_frame.type) {
     case FRAME_TYPE_HELLO:
       ByteWriter::appendU16(i_frame.version, o_out);
+      ByteWriter::appendU8(i_frame.resuming ? 1U : 0U, o_out);
       writeIdentifier(i_frame.sessionId, o_out);
       writeOpaque(i_frame.capabilities, o_out);
       break;

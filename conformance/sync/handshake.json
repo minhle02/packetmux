@@ -1,0 +1,124 @@
+{
+  "scenarios": [
+    {"name": "hello-is-the-first-frame", "requirement": "FR-HS-1", "role": "client", "config": {"capabilities": "0708"}, "steps": [
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": false, "capabilities": "0708"}]}
+    ]},
+    {"name": "server-sends-hello-too", "requirement": "FR-HS-1", "role": "server", "steps": [
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": false}]}
+    ]},
+    {"name": "peer-details-reach-the-host", "requirement": "FR-HS-5", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1", "capabilities": "0102"}},
+      {"op": "expect_events", "events": [{"type": "CONNECTED", "peer_session_id": "peer-1", "capabilities": "0102"}]},
+      {"op": "expect_state", "state": "ESTABLISHED"}
+    ]},
+    {"name": "frame-before-hello", "requirement": "FR-HS-2", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "DATA", "stream_id": 1, "data": "aa"}},
+      {"op": "expect_state", "state": "DRAINING"},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"}
+    ]},
+    {"name": "second-hello", "requirement": "FR-HS-2", "role": "client", "setup": "established", "steps": [
+      {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}},
+      {"op": "expect_state", "state": "DRAINING"},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"}
+    ]},
+    {"name": "wrong-version", "requirement": "FR-HS-3", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "drain"},
+      {"op": "rx", "wire": "01000000000003ff"},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "PROTOCOL_ERROR", "codec_status": "UNSUPPORTED_VERSION"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"}
+    ]},
+    {"name": "bad-resuming-flag", "requirement": "FR-WIRE-4a", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "drain"},
+      {"op": "rx", "wire": "01000000000002020002733100000000"},
+      {"op": "expect_frames", "frames": [{"type": "GOAWAY", "code": "PROTOCOL_ERROR"}]},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "PROTOCOL_ERROR", "codec_status": "BAD_FLAG"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"}
+    ]},
+    {"name": "hello-timeout-fires-at-the-deadline", "requirement": "FR-HS-4", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "drain"},
+      {"op": "expect_deadline", "ms": 10000},
+      {"op": "advance", "ms": 9999},
+      {"op": "tick"},
+      {"op": "expect_state", "state": "HANDSHAKING"},
+      {"op": "advance", "ms": 1},
+      {"op": "tick"},
+      {"op": "expect_events", "events": [{"type": "DISCONNECTED", "code": "TIMEOUT"}]},
+      {"op": "expect_state", "state": "DISCONNECTED"},
+      {"op": "expect_deadline", "ms": null}
+    ]},
+    {"name": "configured-hello-timeout", "requirement": "FR-HS-4", "role": "client", "config": {"hello_timeout_ms": 50}, "steps": [
+      {"op": "attach"},
+      {"op": "drain"},
+      {"op": "expect_deadline", "ms": 50}
+    ]},
+    {"name": "open-before-hello-arrives", "requirement": "FR-STR-5", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "open", "kind": "k", "expect_id": 1},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": false}, {"type": "OPEN", "stream_id": 1, "kind": "k"}]}
+    ]},
+    {"name": "resuming-is-false-on-the-first-connection", "requirement": "FR-HS-7", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": false}]}
+    ]},
+    {"name": "resuming-is-true-after-a-handshake", "requirement": "FR-HS-7", "role": "client", "setup": "established", "steps": [
+      {"op": "lost"},
+      {"op": "drain"},
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": true}]}
+    ]},
+    {"name": "resuming-stays-true-over-reconnects", "requirement": "FR-HS-7", "role": "client", "setup": "established", "steps": [
+      {"op": "lost"},
+      {"op": "drain"},
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": true}]},
+      {"op": "lost"},
+      {"op": "drain"},
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": true}]},
+      {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1"}},
+      {"op": "drain_events"},
+      {"op": "lost"},
+      {"op": "drain"},
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": true}]}
+    ]},
+    {"name": "resuming-is-false-after-a-failed-handshake", "requirement": "FR-HS-7", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": false}]},
+      {"op": "lost"},
+      {"op": "drain"},
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": false}]}
+    ]},
+    {"name": "resuming-is-false-after-a-hello-timeout", "requirement": "FR-HS-7", "role": "client", "steps": [
+      {"op": "attach"},
+      {"op": "drain"},
+      {"op": "advance", "ms": 10000},
+      {"op": "tick"},
+      {"op": "drain"},
+      {"op": "attach"},
+      {"op": "expect_frames", "frames": [{"type": "HELLO", "session_id": "session-1", "resuming": false}]}
+    ]},
+    {"name": "a-resuming-peer-is-accepted", "requirement": "FR-HS-7", "role": "server", "steps": [
+      {"op": "attach"},
+      {"op": "drain"},
+      {"op": "rx", "frame": {"type": "HELLO", "session_id": "peer-1", "resuming": true}},
+      {"op": "expect_events", "events": [{"type": "CONNECTED", "peer_session_id": "peer-1"}]},
+      {"op": "expect_state", "state": "ESTABLISHED"}
+    ]}
+  ]
+}

@@ -51,6 +51,7 @@ PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_BAD_IDENTIFIER,
                      CODEC_STATUS_BAD_IDENTIFIER);
 PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_INVALID_ARGUMENT,
                      CODEC_STATUS_INVALID_ARGUMENT);
+PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_BAD_FLAG, CODEC_STATUS_BAD_FLAG);
 PACKETMUX_SAME_VALUE(PACKETMUX_CODEC_STATUS_MAX, CODEC_STATUS_MAX);
 
 PACKETMUX_SAME_VALUE(PACKETMUX_ROLE_CLIENT, ROLE_CLIENT);
@@ -73,6 +74,8 @@ PACKETMUX_SAME_VALUE(PACKETMUX_REASON_PROTOCOL_ERROR,
                      REASON_CODE_PROTOCOL_ERROR);
 PACKETMUX_SAME_VALUE(PACKETMUX_REASON_UNSUPPORTED_KIND,
                      REASON_CODE_UNSUPPORTED_KIND);
+PACKETMUX_SAME_VALUE(PACKETMUX_REASON_SESSION_NOT_FOUND,
+                     REASON_CODE_SESSION_NOT_FOUND);
 PACKETMUX_SAME_VALUE(PACKETMUX_REASON_MAX, REASON_CODE_MAX);
 
 PACKETMUX_SAME_VALUE(PACKETMUX_FRAME_TYPE_UNKNOWN, FRAME_TYPE_UNKNOWN);
@@ -219,6 +222,7 @@ packetmux_frame_t toFrame(const FrameView& i_frame) {
   return {.type = i_frame.type,
           .stream_id = i_frame.streamId,
           .version = i_frame.version,
+          .resuming = i_frame.resuming,
           .session_id = toBytes(i_frame.sessionId),
           .capabilities = toBytes(i_frame.capabilities),
           .kind = toBytes(i_frame.kind),
@@ -233,6 +237,7 @@ FrameView toFrameView(const packetmux_frame_t& i_frame) {
   return {.type = static_cast<FrameType>(i_frame.type),
           .streamId = i_frame.stream_id,
           .version = i_frame.version,
+          .resuming = i_frame.resuming,
           .sessionId = toView(i_frame.session_id),
           .capabilities = toSpan(i_frame.capabilities),
           .kind = toView(i_frame.kind),

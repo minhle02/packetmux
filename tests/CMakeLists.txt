@@ -5,11 +5,16 @@ FetchContent_Declare(googletest
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+FetchContent_Declare(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(googletest nlohmann_json)
 
 add_executable(packetmux_tests
     ByteIoTest.cpp
     CodecTest.cpp
+    ConformanceTest.cpp
     GoldenVectorsTest.cpp
     KeepAliveTest.cpp
     RoundRobinSchedulerTest.cpp
@@ -20,13 +25,14 @@ add_executable(packetmux_tests
     SessionStreamTest.cpp
     StreamStateMachineTest.cpp
 )
-target_link_libraries(packetmux_tests PRIVATE packetmux::packetmux GTest::gtest_main)
+target_link_libraries(packetmux_tests PRIVATE
+    packetmux::packetmux GTest::gtest_main nlohmann_json::nlohmann_json)
 target_include_directories(packetmux_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_compile_definitions(packetmux_tests PRIVATE
-    PACKETMUX_VECTORS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/vectors"
+    PACKETMUX_CONFORMANCE_DIR="${PROJECT_SOURCE_DIR}/conformance"
 )
 
 # Compiled as C: it proves the public C header is valid C and drives the library
