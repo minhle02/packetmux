@@ -106,7 +106,8 @@ def wheel_platform_tag() -> str:
         return f"macosx_{OLDEST_MACOS}_{machine}"
     if sys.platform == "win32":
         return "win_amd64"
-    return f"linux_{machine}"
+    # CI builds in a manylinux container, and says so. A wheel built anywhere else stays linux_.
+    return f"{os.environ.get('PACKETMUX_LINUX_TAG', 'linux')}_{machine}"
 
 
 def build_wheel(build_type: str, clean: bool) -> None:

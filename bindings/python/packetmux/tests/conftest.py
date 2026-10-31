@@ -20,9 +20,13 @@ def _build_library() -> Path:
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
-        ["cmake", "--build", str(build), "-j8"], check=True, stdout=subprocess.DEVNULL
+        ["cmake", "--build", str(build), "--config", "Release", "-j8"],
+        check=True,
+        stdout=subprocess.DEVNULL,
     )
-    suffix = {"darwin": ".dylib", "win32": ".dll"}.get(sys.platform, ".so")
+    if sys.platform == "win32":
+        return build / "Release" / "packetmux.dll"  # Visual Studio is multi-config
+    suffix = ".dylib" if sys.platform == "darwin" else ".so"
     return build / f"libpacketmux{suffix}"
 
 

@@ -62,18 +62,20 @@ ctest --test-dir build/tests
 
 ## How to install a package
 
-The packages are built locally for now. A wheel contains native code, so it is built per platform.
+Packages are on the [Releases page](https://github.com/minhle02/packetmux/releases). A wheel contains
+native code, so there is one per platform: Linux x64 and arm64, macOS arm64, and Windows x64. To use a
+package you built yourself:
 
 ```sh
-pip install build/packages/packetmux-0.2.0-py3-none-macosx_11_0_arm64.whl
-npm install build/packages/packetmux-0.2.0.tgz
+pip install build/packages/packetmux-0.3.0-py3-none-macosx_11_0_arm64.whl
+npm install build/packages/packetmux-0.3.0.tgz
 ```
 
 In a `pyproject.toml`:
 
 ```toml
 [project]
-dependencies = ["packetmux @ file:///path/to/packetmux-0.2.0-py3-none-macosx_11_0_arm64.whl"]
+dependencies = ["packetmux @ file:///path/to/packetmux-0.3.0-py3-none-macosx_11_0_arm64.whl"]
 ```
 
 To run a binding from this repository instead, as the tests do, build its `macos` or `wasm` target. The

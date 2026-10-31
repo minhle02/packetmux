@@ -1,6 +1,7 @@
 {
   "name": "packetmux",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "license": "MIT",
   "description": "Many byte streams over one connection, with a session that survives reconnects",
   "type": "module",
   "main": "index.js",

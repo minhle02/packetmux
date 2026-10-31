@@ -136,7 +136,7 @@ M5 keeps its scope: framer, fuzzing, sanitizers, performance and size targets.
 | # | Request | State | Reason |
 |---|---|---|---|
 | 3 | Browser upload cap | Deferred | When picked up, a flat higher default is the wrong fix. 1 MiB on a 10 Mbit/s uplink can hold a keystroke behind about 0.8 s of queue, so the limit should grow only while the buffer drains between ticks |
-| 4 | Linux and Windows wheels | Deferred | Needs a git remote with CI runners. `INTENT.md` §11 still requires these builds before RemoteDevice's `main` |
+| 4 | Linux and Windows wheels | In progress | GitHub Actions builds them, and GitHub Releases hosts them. `INTENT.md` §11 still requires these builds before RemoteDevice's `main` |
 | 13 | Verify optimised output | Deferred | The current build is fine, and `a68193b` fixed one possible cause of the slow dylib, mixed Debug and Release objects |
 | 10 | New session after `SessionNotFound` | Declined | D22: restarting silently would hide the loss of every open stream |
 | 12 | Reset by stream ID | Declined | Nothing uses it. RemoteDevice removed its route, and the UI never called it |
