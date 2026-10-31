@@ -253,9 +253,9 @@ PACKETMUX_API packetmux_status_t packetmux_session_write(
     packetmux_session_t* i_session, uint32_t i_stream_id,
     const uint8_t* i_bytes, size_t i_size, uint64_t i_now_ms,
     size_t* o_accepted) PACKETMUX_NOEXCEPT;
-PACKETMUX_API packetmux_status_t packetmux_session_consume(
-    packetmux_session_t* i_session, uint32_t i_stream_id,
-    uint64_t i_bytes) PACKETMUX_NOEXCEPT;
+PACKETMUX_API packetmux_status_t
+packetmux_session_consume(packetmux_session_t* i_session, uint32_t i_stream_id,
+                          uint64_t i_bytes) PACKETMUX_NOEXCEPT;
 PACKETMUX_API packetmux_status_t packetmux_session_send_eof(
     packetmux_session_t* i_session, uint32_t i_stream_id) PACKETMUX_NOEXCEPT;
 PACKETMUX_API packetmux_status_t packetmux_session_reset_stream(

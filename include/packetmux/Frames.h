@@ -76,16 +76,16 @@ struct FrameLimits {
 struct FrameView {
   FrameType type = FRAME_TYPE_UNKNOWN;
   uint32_t streamId = CONNECTION_STREAM_ID;
-  uint16_t version = PROTOCOL_VERSION;    // HELLO
-  bool resuming = false;                  // HELLO
-  std::string_view sessionId;             // HELLO
-  std::span<const uint8_t> capabilities;  // HELLO
-  std::string_view kind;                  // OPEN
-  std::span<const uint8_t> params;        // OPEN
-  ReasonCode code = REASON_CODE_OK;       // OPEN_ERR, RST, GOAWAY
-  std::span<const uint8_t> message;       // OPEN_ERR
-  std::span<const uint8_t> data;          // DATA
-  uint64_t nonce = 0U;                    // PING, PONG
+  uint16_t version = PROTOCOL_VERSION;              // HELLO
+  bool resuming = false;                            // HELLO
+  std::string_view sessionId;                       // HELLO
+  std::span<const uint8_t> capabilities;            // HELLO
+  std::string_view kind;                            // OPEN
+  std::span<const uint8_t> params;                  // OPEN
+  ReasonCode code = REASON_CODE_OK;                 // OPEN_ERR, RST, GOAWAY
+  std::span<const uint8_t> message;                 // OPEN_ERR
+  std::span<const uint8_t> data;                    // DATA
+  uint64_t nonce = 0U;                              // PING, PONG
   uint32_t receiveWindow = DEFAULT_RECEIVE_WINDOW;  // HELLO
   uint32_t credit = 0U;                             // WINDOW
 };

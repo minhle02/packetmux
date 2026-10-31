@@ -156,7 +156,8 @@ void checkValidVector(const Vector& i_vector, const Bytes& i_wire,
       .nonce = std::stoull(fieldOr(i_vector, "nonce", "0")),
       .receiveWindow = static_cast<uint32_t>(std::stoul(fieldOr(
           i_vector, "receive_window", std::to_string(DEFAULT_RECEIVE_WINDOW)))),
-      .credit = static_cast<uint32_t>(std::stoul(fieldOr(i_vector, "credit", "0"))),
+      .credit =
+          static_cast<uint32_t>(std::stoul(fieldOr(i_vector, "credit", "0"))),
   };
 
   FrameView decoded;
@@ -187,8 +188,8 @@ void checkValidVector(const Vector& i_vector, const Bytes& i_wire,
 }
 
 TEST(GoldenVectorsTest, FramesV2) {
-  const std::vector<Vector> vectors =
-      loadVectors(std::string(PACKETMUX_CONFORMANCE_DIR) + "/vectors/frames.txt");
+  const std::vector<Vector> vectors = loadVectors(
+      std::string(PACKETMUX_CONFORMANCE_DIR) + "/vectors/frames.txt");
   ASSERT_GE(vectors.size(), 50U);
 
   std::map<std::string, size_t> names;

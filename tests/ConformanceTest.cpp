@@ -7,13 +7,12 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include <nlohmann/json.hpp>
 
 #include "packetmux/Codec.h"
 #include "packetmux/Session.h"
@@ -192,8 +191,7 @@ class Harness {
  private:
   static SessionConfig configOf(const Json& i_scenario) {
     SessionConfig config;
-    config.role =
-        i_scenario.at("role") == "server" ? ROLE_SERVER : ROLE_CLIENT;
+    config.role = i_scenario.at("role") == "server" ? ROLE_SERVER : ROLE_CLIENT;
     config.sessionId = "session-1";
     const Json fields = i_scenario.value("config", Json::object());
     config.capabilities = bytesField(fields, "capabilities");
@@ -205,8 +203,8 @@ class Harness {
         fields.value("max_queued_bytes", config.maxQueuedBytes);
     config.maxQueuedBytesPerStream = fields.value(
         "max_queued_bytes_per_stream", config.maxQueuedBytesPerStream);
-    config.maxQueuedControlFrames = fields.value(
-        "max_queued_control_frames", config.maxQueuedControlFrames);
+    config.maxQueuedControlFrames = fields.value("max_queued_control_frames",
+                                                 config.maxQueuedControlFrames);
     config.helloTimeoutMs =
         fields.value("hello_timeout_ms", config.helloTimeoutMs);
     config.pingIntervalMs =
@@ -244,12 +242,12 @@ class Harness {
           .capabilities = capabilities,
           .kind = kind,
           .params = params,
-          .code =
-              REASON_NAMES.at(fields.value("code", std::string("OK"))),
+          .code = REASON_NAMES.at(fields.value("code", std::string("OK"))),
           .message = text,
           .data = data,
           .nonce = nonce.is_string() ? m_lastPing : nonce.get<uint64_t>(),
-          .receiveWindow = fields.value("receive_window", DEFAULT_RECEIVE_WINDOW),
+          .receiveWindow =
+              fields.value("receive_window", DEFAULT_RECEIVE_WINDOW),
           .credit = fields.value("credit", 0U),
       };
       ASSERT_EQ(Codec::encode(frame, FrameLimits{}, &message), CODEC_STATUS_OK);
@@ -278,7 +276,8 @@ class Harness {
     }
   }
 
-  // With i_expected: compares every frame in order. Returns how many there were.
+  // With i_expected: compares every frame in order. Returns how many there
+  // were.
   size_t takeFrames(const Json* const i_expected) {
     size_t count = 0U;
     std::span<const uint8_t> message;
@@ -383,7 +382,8 @@ class Harness {
       const Json& fields = expected.at(index);
       EXPECT_EQ(actual[index].streamId, fields.at("stream_id").get<uint32_t>());
       if (fields.contains("state")) {
-        EXPECT_EQ(actual[index].state, STREAM_STATE_NAMES.at(fields.at("state")));
+        EXPECT_EQ(actual[index].state,
+                  STREAM_STATE_NAMES.at(fields.at("state")));
       }
       if (fields.contains("kind")) {
         EXPECT_EQ(actual[index].kind, fields.at("kind").get<std::string>());
@@ -415,7 +415,8 @@ class Harness {
       {"advance", [this] { m_nowMs += step().at("ms").get<uint64_t>(); }},
       {"tick", [this] { check(m_session.onTick(m_nowMs)); }},
       {"open", [this] { open(); }},
-      {"accept", [this] { check(m_session.acceptStream(step().at("stream"))); }},
+      {"accept",
+       [this] { check(m_session.acceptStream(step().at("stream"))); }},
       {"reject",
        [this] {
          const Bytes message = bytesField(step(), "message");
@@ -489,7 +490,7 @@ TEST(ConformanceTest, ManifestProtocolVersionMatches) {
 TEST(ConformanceTest, ManifestListsEveryFile) {
   const Json manifest = readJson("manifest.json");
   const std::vector<std::string> layers{"vectors", "sync", "params", "async",
-                                         "transport"};
+                                        "transport"};
   std::set<std::string> listed{"sync/setups.json"};
   for (const std::string& layer : layers) {
     for (const std::string path : manifest.at(layer)) {
