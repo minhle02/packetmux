@@ -36,6 +36,10 @@ export class ServerSession {
     return this._host.connected;
   }
 
+  get transport() {
+    return this._host.activeTransport;
+  }
+
   get rttMs() {
     return this._host.rttMs;
   }
@@ -65,9 +69,10 @@ export class ServerSession {
     }
   }
 
-  onClosed() {
+  onClosed(code) {
     this._cancelGrace();
     this.#server._sessions.delete(this.sessionId);
+    this.#server._notifyClosed(this, code);
   }
 
   // --- Internals -------------------------------------------------------------------------
@@ -86,9 +91,11 @@ export class ServerSession {
 export class Server {
   _sessions = new Map();
   #authorize;
+  #onSessionClosed;
 
-  constructor({ handlers, authorize, capabilities = new Uint8Array(0), ...overrides } = {}) {
+  constructor({ handlers, authorize, onSessionClosed, capabilities = new Uint8Array(0), ...overrides } = {}) {
     this.#authorize = authorize;
+    this.#onSessionClosed = onSessionClosed;
     this._config = {
       handlers: handlerTable(handlers),
       capabilities,
@@ -164,6 +171,14 @@ export class Server {
 
   async close(code = Reason.OK) {
     await Promise.all(this.sessions().map((session) => session.close(code)));
+  }
+
+  _notifyClosed(session, code) {
+    try {
+      this.#onSessionClosed?.(session, code);
+    } catch (error) {
+      console.error('packetmux: session closed listener failed', error);
+    }
   }
 
   // Null, with the transport closed, unless the first message is a valid HELLO in time.

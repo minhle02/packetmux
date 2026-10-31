@@ -215,6 +215,9 @@ to `Reason.KILLED`. Queued data is discarded, and the peer's next read raises `S
 Every blocking call can be cancelled in the usual way, for example with `asyncio.wait_for`. The session
 stays usable. A cancelled `write` leaves an unknown amount sent.
 
+Cancelling `connect` is different: there is no client to go back to, so it closes the session and stops
+dialing.
+
 ## 4. Run a server
 
 Hand each accepted connection to `serve`. It reads the first message, finds or creates the session, and
@@ -307,6 +310,7 @@ A refused client closes with `SessionClosed(code)`, and does not retry.
 for session in server.sessions():
     print(session.session_id, session.connected, session.data, session.rtt_ms, session.streams())
 
+session.transport                                  # the active Transport, or None
 stream = await session.open_stream("logs")         # raises NoConnection while disconnected
 await session.close(Reason.KILLED)
 await server.close()                               # closes every session
@@ -314,6 +318,19 @@ await server.close()                               # closes every session
 
 A client that dials while its old connection still looks alive replaces it. A session that loses its
 connection waits for `grace_period`, then closes with `TIMEOUT`.
+
+To clean up after a session, however it ended, pass `on_session_closed`:
+
+```python
+def forget(session: ServerSession, code: Reason) -> None:
+    release_device(session.data)
+
+
+server = Server(handlers=handlers, authorize=authorize, on_session_closed=forget)
+```
+
+It runs once per session, after the session has left `server.sessions()`. It is synchronous, so start a
+task for async cleanup. An exception is logged and goes no further.
 
 ## Typed params
 

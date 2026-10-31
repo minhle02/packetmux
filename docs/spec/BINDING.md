@@ -182,6 +182,9 @@ calls `dial(session_id)`, and returns once the handshake has finished. A consume
 - Backoff starts at `reconnect_backoff[0]`, and the last value repeats. It resets only after a handshake
   finishes. After `connect` has returned, there is no attempt limit.
 - The first `connect` retries too, and fails with `NoConnection` after `connect_timeout`.
+- Cancelling `connect` closes the client and stops dialing, in the language's usual way of cancelling.
+  If the handshake has already finished, the session closes too, because the caller has no client to
+  close.
 - A dial function stops reconnecting by raising `GiveUp`. The client closes with that error.
 - `GOAWAY` closes the client. `SESSION_NOT_FOUND` gives `SessionNotFound`, and any other code gives
   `SessionClosed(code)`. The SDK MUST NOT open a replacement session by itself.
@@ -211,6 +214,13 @@ To refuse, send `HELLO`, then `GOAWAY(code)`, then wait for the buffer within `d
 
 On a lost connection that was not replaced, start the grace timer. When it fires, close the session
 with `TIMEOUT`.
+
+`on_session_closed(session, code)` is an optional server callback. It runs once for each session that
+ends, however it ended, after the session has left `sessions()`. It is synchronous, and an exception
+from it is logged and goes no further. A refused connection never made a session, so it does not run.
+
+`session.transport` is the active Transport. Like `client.transport`, it is empty until the handshake
+finishes and while disconnected, and it is never a replaced Transport.
 
 ### 2.5 Streams
 

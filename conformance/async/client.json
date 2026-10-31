@@ -158,6 +158,21 @@
     {"name": "a-transport-too-small-is-refused", "requirement": "FR-TP-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
       {"op": "small_transport", "max_message_size": 100},
       {"op": "connect", "expect_error": "GiveUp"}
+    ]},
+    {"name": "cancelling-connect-stops-dialing", "requirement": "FR-CLI-7", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "dial_fails", "count": 100000},
+      {"op": "cancel_connect"},
+      {"op": "dial_count"},
+      {"op": "settle"},
+      {"op": "expect_no_new_dials"}
+    ]},
+    {"name": "cancelling-connect-during-a-hung-dial-leaves-no-session", "requirement": "FR-CLI-7", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "dial_hangs"},
+      {"op": "cancel_connect"},
+      {"op": "dial_works"},
+      {"op": "settle"},
+      {"op": "expect_sessions", "count": 0},
+      {"op": "expect_no_session_closed"}
     ]}
   ]
 }

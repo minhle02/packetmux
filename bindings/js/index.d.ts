@@ -217,6 +217,8 @@ export interface ServerOptions {
   handlers?: readonly HandlerEntry[];
   /** Returns data for session.data, or throws Refuse. */
   authorize?: (request: ConnectRequest) => Promise<unknown>;
+  /** Runs once for each session that ends, after it has left sessions(). */
+  onSessionClosed?: (session: ServerSession, code: number) => void;
   capabilities?: Uint8Array;
   gracePeriodMs?: number;
   maxSessions?: number;
@@ -230,6 +232,8 @@ export class ServerSession {
   readonly connected: boolean;
   /** What authorize returned. */
   readonly data: unknown;
+  /** The active Transport, or null. */
+  readonly transport: Transport | null;
   readonly rttMs: number | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   openStream(target: string | TypedParams<any>, params?: Uint8Array): Promise<Stream>;

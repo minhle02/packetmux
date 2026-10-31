@@ -59,6 +59,8 @@ Purpose: let latency-sensitive streams (scrcpy, live logcat) go ahead of bulk tr
 
 Purpose: a slow consumer slows only its own stream, not the whole connection (INTENT.md §8).
 
+Scheduled as M11, and goes into v2 while v2 is unreleased (IMPROVEMENTS.md §3).
+
 - A `WINDOW` frame, which the receiver uses to grant send credit per stream, as in the RemoteDevice
   v1 protocol (§5.3 there).
 - The receiver returns credit only after its consumer has taken the data. This brings back a

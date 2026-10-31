@@ -142,6 +142,10 @@ export class SessionHost {
     return this.#core === null ? null : this.#core.rttMs;
   }
 
+  get activeTransport() {
+    return this.connected ? this.connection?.transport ?? null : null;
+  }
+
   // --- The one path into the core ----------------------------------------------------------
 
   #afterCall() {

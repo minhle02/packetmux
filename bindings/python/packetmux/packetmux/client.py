@@ -168,8 +168,7 @@ class Client:
 
     @property
     def transport(self) -> Optional[Transport]:
-        connection = self._host.connection
-        return None if connection is None or not self._host.connected else connection.transport
+        return self._host.active_transport
 
     @property
     def rtt_ms(self) -> Optional[int]:
@@ -265,6 +264,10 @@ async def connect(
         client._first_outcome.cancel()
         client._fail(NoConnection(str(client._last_dial_error or "no connection")))
         raise client.close_error from client._last_dial_error
+    except asyncio.CancelledError:  # nobody holds the client, so nothing else would close it
+        client._first_outcome.cancel()
+        client._fail(NoConnection("connect was cancelled"))
+        raise
     if client.close_error is not None:  # refused: GOAWAY came right behind HELLO
         raise client.close_error
     return client

@@ -79,6 +79,7 @@ for (const name of checks) {
 class Harness {
   handlerSaw = [];
   serverCloseSeen = [];
+  sessionsClosed = [];
   states = [];
   smallTransport = 0;
   clients = new Map();
@@ -103,6 +104,13 @@ class Harness {
     this.server = new Server({
       handlers: this.handlers,
       authorize: this.authorizeWith(scenario),
+      onSessionClosed: (closed, code) => {
+        assert.ok(!this.server.sessions().includes(closed));
+        this.sessionsClosed.push(code);
+        if (scenario.session_hook === 'raise') {
+          throw new Error('hook failed');
+        }
+      },
       gracePeriodMs: options.grace_period_ms ?? 120_000,
       maxSessions: options.max_sessions ?? 1024,
       maxReadBuffer: options.max_read_buffer ?? 16 << 20,
@@ -271,6 +279,13 @@ const asyncSteps = {
     }
   },
   async break(h, s) { await h.link(s)[0].breakConnection(); },
+  async cancel_connect(h) {
+    const controller = new AbortController();
+    const connecting = connect(h.dial, { ...h.clientOptions, handlers: h.handlers, signal: controller.signal });
+    await sleep(5);
+    controller.abort();
+    await assert.rejects(timed(connecting));
+  },
   async cancel_read(h, s) {
     const controller = new AbortController();
     const reading = h.streams.get(s.stream).read({ signal: controller.signal });
@@ -333,6 +348,7 @@ const asyncSteps = {
   async expect_handler_saw(h, s) { await h.until(() => h.handlerSaw.includes(Reason[s.code]), s); },
   async expect_high_water(h, s) { assert.equal(h.streams.get(s.stream).readHighWater, s.value); },
   async expect_no_new_dials(h) { assert.equal(h.network.dials, h.dialsSeen); },
+  async expect_no_session_closed(h) { assert.deepEqual(h.sessionsClosed, []); },
   async expect_pending(h, s) {
     assert.equal(await withTimeout(h.tasks.get(s.task), 1), TIMED_OUT);
   },
@@ -358,11 +374,19 @@ const asyncSteps = {
     assert.ok(Buffer.concat(chunks).equals(Buffer.from(expected)), 'wrong bytes');
   },
   async expect_server_close(h, s) { assert.deepEqual(h.serverCloseSeen, [Reason[s.code]]); },
+  async expect_session_closed(h, s) {
+    await h.until(() => h.sessionsClosed.length > 0, s);
+    assert.deepEqual(h.sessionsClosed, [Reason[s.code]]);
+  },
   async expect_session_disconnected(h, s) { await h.until(() => !h.session().connected, s); },
   async expect_session_ids_differ(h, s) {
     const a = h.clients.get(s.a).sessionId;
     assert.notEqual(a, h.clients.get(s.b).sessionId);
     assert.match(a, /^[a-zA-Z0-9-]{16,}$/);
+  },
+  async expect_session_transport(h, s) {
+    const expected = { current: h.network.links.at(-1)[1], none: null }[s.is];
+    await h.until(() => h.session().transport === expected, s);
   },
   async expect_sessions(h, s) { await h.until(() => h.server.sessions().length === s.count, s); },
   async expect_state(h, s) { await h.until(() => h.client(s).state === s.state, s); },

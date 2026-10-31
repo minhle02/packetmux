@@ -6,7 +6,7 @@ from typing import Any, Awaitable, Callable, Mapping, Optional
 
 from .core import CodecError, Frame, FrameType, Reason, Role, config_defaults, decode_frame, encode_frame
 from .errors import GiveUp, Refuse, SessionClosed, TransportClosed
-from .host import Connection, SessionHost, handler_table, spawn, wait_at_most
+from .host import Connection, SessionHost, handler_table, log, spawn, wait_at_most
 from .stream import Handlers, Stream, StreamInfo
 from .transport import Transport
 
@@ -43,6 +43,10 @@ class ServerSession:
         return self._host.connected
 
     @property
+    def transport(self) -> Optional[Transport]:
+        return self._host.active_transport
+
+    @property
     def rtt_ms(self) -> Optional[int]:
         return self._host.rtt_ms
 
@@ -72,6 +76,7 @@ class ServerSession:
     def on_closed(self, code: Reason, connection: Optional[Connection]) -> None:
         self._cancel_grace()
         self._server._sessions.pop(self.session_id, None)
+        self._server._notify_closed(self, code)
 
     # --- Internals -------------------------------------------------------------------------
 
@@ -95,6 +100,7 @@ class ConnectRequest:
 
 
 Authorize = Callable[[ConnectRequest], Awaitable[Any]]  # returns data, or raises Refuse
+OnSessionClosed = Callable[[ServerSession, Reason], None]
 
 
 class Server:
@@ -104,9 +110,11 @@ class Server:
         authorize: Optional[Authorize] = None,
         capabilities: bytes = b"",
         options: Optional[ServerOptions] = None,
+        on_session_closed: Optional[OnSessionClosed] = None,
     ) -> None:
         self._handlers = handler_table(handlers)
         self._authorize = authorize
+        self._on_session_closed = on_session_closed
         self._capabilities = capabilities
         self._options = options or ServerOptions()
         self._sessions: dict[str, ServerSession] = {}
@@ -173,6 +181,13 @@ class Server:
 
     async def close(self, code: Reason = Reason.OK) -> None:
         await asyncio.gather(*(session.close(code) for session in self.sessions()))
+
+    def _notify_closed(self, session: ServerSession, code: Reason) -> None:
+        if self._on_session_closed is not None:
+            try:
+                self._on_session_closed(session, code)
+            except Exception:
+                log.exception("session closed listener failed")
 
     def _create(self, session_id: str, data: Any) -> ServerSession:
         session = ServerSession(self, session_id, data)

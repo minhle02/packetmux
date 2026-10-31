@@ -89,6 +89,8 @@ class Harness:
         self.handler_saw: list[Reason] = []
         self.server_close_seen: list[Reason] = []
         self.states: list[str] = []
+        self.sessions_closed: list[Reason] = []
+        self.session_hook_raises = scenario.get("session_hook") == "raise"
         self.client_options = ClientOptions(
             connect_timeout=options["connect_timeout_ms"] / 1000,
             reconnect_backoff=[ms / 1000 for ms in options["reconnect_backoff_ms"]],
@@ -101,7 +103,12 @@ class Harness:
             session=options.get("session", {}),
         )
         self.handlers = [self._handler(kind, spec) for kind, spec in scenario["handlers"].items()]
-        self.server = Server(self.handlers, self._authorize_with(scenario), options=server_options)
+        self.server = Server(
+            self.handlers,
+            self._authorize_with(scenario),
+            options=server_options,
+            on_session_closed=self._on_session_closed,
+        )
         self.network = MemoryNetwork(self.server)
         self.small_transport = 0
         self.clients: dict[str, Any] = {}
@@ -117,6 +124,12 @@ class Harness:
         if self.small_transport:
             transport.max_message_size = self.small_transport
         return transport
+
+    def _on_session_closed(self, session: Any, code: Reason) -> None:
+        assert session not in self.server.sessions()
+        self.sessions_closed.append(code)
+        if self.session_hook_raises:
+            raise RuntimeError("hook failed")
 
     def _authorize_with(self, scenario: dict) -> Any:
         rule = scenario.get("authorize")
@@ -315,6 +328,15 @@ async def do_cancel_read(h: Harness, s: dict) -> None:
     await asyncio.gather(task, return_exceptions=True)
 
 
+async def do_cancel_connect(h: Harness, s: dict) -> None:
+    connecting = packetmux.connect(h.dial, handlers=h.handlers, options=h.client_options)
+    task = asyncio.get_running_loop().create_task(connecting)
+    await asyncio.sleep(0.005)
+    task.cancel()
+    await asyncio.wait({task}, timeout=TIMEOUT)
+    assert task.cancelled()
+
+
 async def do_record_states(h: Harness, s: dict) -> None:
     h.client(s).on_state_change(lambda state: h.states.append(state.value))
 
@@ -473,9 +495,24 @@ async def do_expect_session_disconnected(h: Harness, s: dict) -> None:
     await h.until(lambda: not h.session().connected, s)
 
 
+async def do_expect_session_closed(h: Harness, s: dict) -> None:
+    await h.until(lambda: h.sessions_closed, s)
+    assert h.sessions_closed == [Reason[s["code"]]]
+
+
+async def do_expect_no_session_closed(h: Harness, s: dict) -> None:
+    assert h.sessions_closed == []
+
+
+async def do_expect_session_transport(h: Harness, s: dict) -> None:
+    expected = {"current": h.network.links[-1][1], "none": None}[s["is"]]
+    await h.until(lambda: h.session().transport is expected, s)
+
+
 ASYNC_STEPS = {
     "await": do_await,
     "break": do_break,
+    "cancel_connect": do_cancel_connect,
     "cancel_read": do_cancel_read,
     "close": do_close,
     "close_session": do_close_session,
@@ -497,12 +534,15 @@ ASYNC_STEPS = {
     "expect_handler_saw": do_expect_handler_saw,
     "expect_high_water": do_expect_high_water,
     "expect_no_new_dials": do_expect_no_new_dials,
+    "expect_no_session_closed": do_expect_no_session_closed,
     "expect_pending": do_expect_pending,
     "expect_raw_closed": do_expect_raw_closed,
     "expect_read": do_expect_read,
     "expect_server_close": do_expect_server_close,
+    "expect_session_closed": do_expect_session_closed,
     "expect_session_disconnected": do_expect_session_disconnected,
     "expect_session_ids_differ": do_expect_ids_differ,
+    "expect_session_transport": do_expect_session_transport,
     "expect_sessions": do_expect_sessions,
     "expect_state": do_expect_state,
     "expect_states": do_expect_states,

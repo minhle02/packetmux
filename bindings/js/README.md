@@ -226,6 +226,9 @@ to `Reason.KILLED`. Queued data is discarded, and the peer's next read rejects w
 `read`, `write`, `waitAccepted` and `openStream` take `{ signal }`, an `AbortSignal`. The session stays
 usable. An aborted `write` leaves an unknown amount sent.
 
+`connect` takes `signal` too. There is no client to go back to, so aborting it closes the session and
+stops dialing.
+
 ## 4. Run a server
 
 The server runs in Node. Hand each accepted connection to `serve`. It reads the first message, finds or
@@ -324,6 +327,7 @@ for (const session of server.sessions()) {
   console.log(session.sessionId, session.connected, session.data, session.rttMs, session.streams())
 }
 
+session.transport // the active Transport, or null
 const stream = await session.openStream('logs') // rejects with NoConnection while disconnected
 await session.close(Reason.KILLED)
 await server.close() // closes every session
@@ -331,6 +335,19 @@ await server.close() // closes every session
 
 A client that dials while its old connection still looks alive replaces it. A session that loses its
 connection waits for `gracePeriodMs`, then closes with `TIMEOUT`.
+
+To clean up after a session, however it ended, pass `onSessionClosed`:
+
+```ts
+const server = new Server({
+  handlers,
+  authorize,
+  onSessionClosed: (session, code) => releaseDevice(session.data),
+})
+```
+
+It runs once per session, after the session has left `server.sessions()`. It is synchronous, so start your
+own async work for cleanup. An exception is logged and goes no further.
 
 ## Typed params
 

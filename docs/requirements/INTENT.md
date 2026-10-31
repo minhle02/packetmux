@@ -437,6 +437,8 @@ does not have to repeat that logic.
 - **FR-CLI-6** Closing a client MUST send `GOAWAY`, wait for the send path within `drain_timeout`,
   close the Transport and release native memory. It MUST be idempotent, and it MUST work as
   `async with` in Python and as an awaited close in TypeScript.
+- **FR-CLI-7** Cancelling `connect` MUST close the client and stop its dial loop, whether or not the
+  handshake has finished.
 
 ### 5.15 Server
 
@@ -458,6 +460,10 @@ does not have to repeat that logic.
 - **FR-SRV-9** A `HELLO` with `resuming` set for a session the server does not have MUST NOT create
   a session. After the authorization hook, the server MUST answer `HELLO`, then
   `GOAWAY(SESSION_NOT_FOUND)`, and close the Transport.
+- **FR-SRV-10** A consumer MUST be able to register one callback that runs exactly once for each
+  session that ends, after the session has left the registry. It receives the session and the
+  reason code.
+- **FR-SRV-11** A server session MUST expose its active Transport, under the same rule as FR-CLI-5.
 
 ### 5.16 Async streams
 
@@ -712,9 +718,14 @@ A milestone is done when its exit criteria pass. The next milestone builds only 
 | M6 | `HELLO.resuming` and `SESSION_NOT_FOUND` in the core; protocol spec, binding spec, and the vectors and sync layers of the conformance suite | FR-HS-7, FR-FRAME-5, FR-CONF-1/2/3/4/7 | The core and both bindings pass both layers from `conformance/` |
 | M7 | SDK in Python and TypeScript: Transport, client, server, async streams, typed params, packaging; params, async and transport layers of the suite | FR-SDK-\*, FR-TP-\*, FR-CLI-\*, FR-SRV-\*, FR-AST-\*, FR-CONF-\*, NFR-SDK-\* | Both SDKs pass the whole suite; injected bugs are caught; Python ↔ TypeScript over a real WebSocket in both directions; the README example runs from an installed package |
 | M8 | Third-language check | Intent, other languages | A small binding passes the vectors and sync layers from the docs alone, and every gap found is fixed in the specs |
+| M9 | SDK gaps from the integration report: cancellation in Python `connect()`, a public "session ended" hook, the active transport on `ServerSession` | IMPROVEMENTS.md §3 | New async scenarios pass in both SDKs and fail when the change is removed |
+| M10 | Benchmark in this repo: latency beside a bulk transfer, upload cost, read buffer high-water marks | IMPROVEMENTS.md §3 | Results recorded, with a proposed default window and the cause of the latency stated or narrowed down |
+| M11 | Credit flow control | IMPROVEMENTS.md §3, ROADMAP.md §4 | See IMPROVEMENTS.md §3 |
+| M12 | Consumer conveniences: socket pump, retryable refusal | IMPROVEMENTS.md §3 | Set when picked up |
 
-The order is M6, M7, M5, then M8 as needed. M5 is a tuning phase and can wait until the SDK is
-stable. Consumers move to the SDK after M7, and that work belongs to each consumer. M5 and the Linux
+The order is M6, M7, M9, M10, M11, M5, then M8 and M12 as needed (IMPROVEMENTS.md). M5 is a tuning
+phase and can wait until the SDK is stable. Consumers move to the SDK after M7, and that work
+belongs to each consumer. M5 and the Linux
 and Windows builds have to finish before PacketMux goes into RemoteDevice's `main`: a native crash
 now takes down the backend process, where it used to be a Python exception.
 

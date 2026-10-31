@@ -173,7 +173,7 @@ export class Client {
   }
 
   get transport() {
-    return this._host.connected ? this._host.connection?.transport ?? null : null;
+    return this._host.activeTransport;
   }
 
   get rttMs() {

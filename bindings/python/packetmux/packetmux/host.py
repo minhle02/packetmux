@@ -166,6 +166,10 @@ class SessionHost:
     def rtt_ms(self) -> Optional[int]:
         return None if self._core is None else self._core.rtt_ms
 
+    @property
+    def active_transport(self) -> Optional[Transport]:
+        return None if self.connection is None or not self.connected else self.connection.transport
+
     # --- The one path into the core ----------------------------------------------------------
 
     def _after_call(self) -> None:
