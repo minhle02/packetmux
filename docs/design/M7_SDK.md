@@ -1,8 +1,9 @@
 # M7 — Async SDK (Python and TypeScript): design
 
-Status: approved, not implemented.
+Status: implemented. Exit criteria met on macOS arm64 (§12).
 Requirements: `docs/requirements/INTENT.md` (§5.12 to §5.16, NFR-SDK, D13 to D23).
-Depends on M6: `HELLO.resuming`, `Reason.SESSION_NOT_FOUND`, and the conformance runners.
+Builds on M6: `HELLO.resuming`, `Reason.SESSION_NOT_FOUND`, and the conformance suite. The spec for a
+new language is `docs/spec/BINDING.md`, level 2.
 
 The SDK is the async layer over the sync binding (M4). A consumer implements a `Transport` and calls
 `connect` or `Server.serve`. Everything else in the host loop moves in here. There is no protocol
@@ -913,8 +914,8 @@ Each runner builds the stream type from `fields`, decodes the input, and compare
 ```
 
 The suite covers every row of the table in §6.4, a missing field, a field with a default, an
-undeclared field, a wrong type, and input that is not an object. The full step list for the async
-layer belongs to the M6 design, with the rest of the suite.
+undeclared field, a wrong type, and input that is not an object. `conformance/README.md` has the full
+step list.
 
 ## 11. Decisions made here
 
@@ -927,3 +928,49 @@ layer belongs to the M6 design, with the rest of the suite.
 | 5 | TypeScript `Transport` pulls with `recv`, with `PushTransport` as a helper | One reader loop and one conformance layer. It costs a promise per message, which NFR-SDK-5 will measure |
 | 6 | Typed params with validators of our own, raw `bytes` still available | Friendlier than handling bytes, and the kind and fields are declared once. The wire does not change (FR-WIRE-5, D23) |
 | 7 | `label` and the stream policy hook are dropped from today's hosts | `kind` and handlers cover both, and consumers can carry their own label |
+
+## 12. Verification results (2026-10-31)
+
+Platform: macOS arm64, Apple Clang, Emscripten 6.0.6, Node 24.18.1, and Python 3.12 for the installed
+wheel and the benchmark. The suites below ran from a clean copy holding only the files git would track.
+
+| Check | Result |
+|---|---|
+| Params, async and transport scenarios, in Python and TypeScript | 33 + 4, 66 and 9, all passing in each |
+| Python tests | 404 of 404 |
+| JS tests | 404 of 404 |
+| C++ tests, Release with `PACKETMUX_WERROR=ON`, and UBSan | 186 of 186 in each |
+| Python server with TS client, and TS server with Python client, over a real WebSocket | Pass: 3 MiB hashed, typed params, a killed connection, reconnect, clean close |
+| Transport checks over a real WebSocket, in each language | 9 of 9 |
+| Deliberate bugs in the two SDKs, against the conformance layers only | 41 of 41 caught, after the fixes below |
+| README examples, from the wheel and `.tgz` in clean projects | Pass, with no `PYTHONPATH` or environment variable. TS type-checks under `strict` |
+| Shared library | 23 exported symbols, down from 319. `minos 11.0`, down from 26.0 |
+| WASM size | 41 KB, against a 150 KB target |
+
+**Bug injection.** The first run caught 34 of 40. Each miss was a hole in the suite, not luck:
+
+| Missed | Why | Fix |
+|---|---|---|
+| A replaced connection delivering or failing late | The old reader was cancelled before it could report. The real window is while a stalled sender keeps the old connection draining | Two scenarios that hold it there |
+| Concurrent writes interleaving | With only writes, wake order keeps the bytes in order. The lock really protects `send_eof` during a blocked write | `eof-waits-for-a-write-in-progress` |
+| `NaN` accepted | A declared field catches it in a second check. In an undeclared field, Python would accept what JS refuses | `nan-in-an-undeclared-field` |
+
+A later run missed one more: a late loss report did kill the new connection, but the client reconnected
+within a millisecond, so "connected" still held. Those scenarios now assert that no dial happened.
+
+**Throughput,** Python, 400 MiB through one link, five runs on the same memory link: the SDK did 543 to
+640 MB/s, and RemoteDevice's hand-written host 477 to 535 MB/s. A small stream's round trip during the
+transfer was 0.51 to 0.61 ms at p50 for the SDK, and 0.51 to 0.55 ms for the hand-written host. A memory
+link has no kernel buffers, so this latency is the best case.
+
+**Memory.** 10 000 connect, echo and close cycles: Python RSS went from 29.7 to 30.0 MB, with no tasks
+left and no sessions left. JS RSS held at 76 MB after the first 2500.
+
+Not done:
+- **TypeScript against RemoteDevice's hand-written host.** Its frontend no longer loads against this
+  package layout, so NFR-SDK-5 is measured for Python only. The TypeScript SDK alone did about 1700 MB/s
+  on a memory link, which says little about a real transfer.
+- **Latency on a real link,** with real kernel buffers. It belongs with the consumers' migration.
+- **A browser or Electron renderer.** The TypeScript SDK ran in Node only.
+- **Linux and Windows wheels.** Those builds do not exist yet (M5).
+- **Publishing.** Packages are built locally.

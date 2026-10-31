@@ -7,9 +7,9 @@ language writes one small runner. Passing them is what "conforms" means.
 |---|---|---|---|
 | vectors | `vectors/frames.txt` | Bytes to frames, and back | Exact bytes |
 | sync | `sync/*.json` | One session against a scripted peer | Exact frames, events and time |
-| params | `params/*.json` (M7) | Typed params validation | Same accept or reject |
-| async | `async/*.json` (M7) | The SDK over a memory transport | Outcomes only |
-| transport | `transport/checks.json` (M7) | Any `Transport` | Named checks |
+| params | `params/*.json` | Typed params validation | Same accept or reject |
+| async | `async/*.json` | The SDK over a memory transport | Outcomes only |
+| transport | `transport/checks.json` | Any `Transport` | Named checks |
 
 Runners exist in `tests/ConformanceTest.cpp`, `tests/GoldenVectorsTest.cpp`,
 `bindings/python/packetmux/tests/` and `bindings/js/test/`. Copy the closest one.
@@ -146,3 +146,152 @@ scenario gives. Fields it leaves out are not compared.
 
 In `expect_streams`, each entry needs `stream_id`, and may give `kind`, `state`, `opener` (0 for
 client, 1 for server), `bytes_sent` and `bytes_received`.
+
+## Params
+
+`params/typed.json` has one set of `fields`, in the form that `define_stream` takes, and two lists.
+
+```json
+{
+  "fields": {"host": "string", "port": "int", "ratio": "float?",
+             "enabled": {"type": "bool", "default": true}},
+  "encode_rejected": [{"name": "wrong-type", "value": {"host": 1, "port": 1, "ratio": null}}],
+  "cases": [
+    {"name": "valid", "input": "7b22...", "result": {"host": "a", "port": 1, "ratio": null, "enabled": true}},
+    {"name": "invalid-utf8", "input": "7b22ff...", "rejected": true}
+  ]
+}
+```
+
+`input` is hex, so that invalid UTF-8 can be written. For each case, decode the input and compare the
+value with `result`, or check that it fails with `InvalidParams`. For `encode_rejected`, check that
+encoding fails with `InvalidParams`.
+
+## Transport
+
+`transport/checks.json` lists named checks, and each language implements each one over a factory that
+returns a connected pair. Expose them to consumers (`check_transport`).
+
+| Check | Requires |
+|---|---|
+| `order` | Whole messages arrive in order, at 80 sizes |
+| `both-directions` | Traffic flows both ways at once |
+| `oversize` | A message over `max_message_size` is refused |
+| `bulk` | 5 MB arrives intact, and the buffer drains to 0 |
+| `buffer-wait` | `wait_buffer_below` returns, while data is buffered and after it drains |
+| `early-messages` | A message that arrives before `recv` is called is not lost |
+| `close-fails-operations` | After a close, `send` and `recv` fail with `TransportClosed` |
+| `peer-close` | A close reaches the other side |
+| `close-is-idempotent` | A second close does nothing |
+
+## Async
+
+A scenario runs real SDK objects, with a memory network between them, and asserts **outcomes**, never
+interleaving: asyncio and Promises schedule differently.
+
+```json
+{
+  "name": "resume-after-the-server-lost-the-session",
+  "requirement": "FR-CLI-4a",
+  "handlers": {"echo": "echo"},
+  "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500, "grace_period_ms": 5},
+  "steps": [
+    {"op": "connect"},
+    {"op": "dial_hangs"},
+    {"op": "break"},
+    {"op": "expect_sessions", "count": 0},
+    {"op": "dial_works"},
+    {"op": "expect_closed", "error": "SessionNotFound", "code": "SESSION_NOT_FOUND"}
+  ]
+}
+```
+
+To run one: create a `Server` and a memory network, and register `handlers` on both the server and each
+client. Run the steps. Then close everything, and fail if that takes more than a few seconds.
+
+`options` may hold `connect_timeout_ms`, `reconnect_backoff_ms`, `grace_period_ms`, `max_sessions`,
+`max_read_buffer`, and `session` for core settings. A scenario may set `authorize` to `refuse:<code>`,
+or to `owner`: the first context owns the session, and any other is refused with `AUTH_REVOKED`.
+
+Handlers take these behaviours. Where a kind maps to an object, it has `behaviour` and `fields`, and the
+handler is registered by stream type.
+
+| Behaviour | The handler |
+|---|---|
+| `echo` | Accepts, writes back everything it reads, then sends `EOF` |
+| `reject:<code>` | Raises `Reject` |
+| `fail` | Raises an error |
+| `accept-then-fail` | Accepts, then raises an error |
+| `return` | Returns without accepting |
+| `reply:<hex>` | Accepts, writes, and returns |
+| `reply-then-reset:<hex>` | Accepts, writes, waits 20 ms, and resets with `KILLED` |
+| `flood:<bytes>` | Accepts, writes that many bytes, and waits |
+| `record-close` | Accepts, and records the reason the stream closed with |
+| `reply-params` | Accepts, and writes `host:port` from typed params |
+| `reply-raw-params` | Accepts, and writes its raw params back |
+
+Streams and clients are named with `as`, and the default client is `client`. `on` picks who opens a
+stream: a client's name, or `server` for its first session.
+
+**Steps on clients and streams:**
+
+| Op | Fields | Does |
+|---|---|---|
+| `connect` | `as`, optional `expect_error`, `expect_code` | `connect` through the network |
+| `open` | `kind`, `as`, optional `on`, `params`, `background`, `expect_error` | `open_stream` |
+| `open_typed` | `kind`, `as`, `fields`, `value`, optional `expect_error` | `open_stream` with typed params |
+| `write` | `stream`, `data`, optional `background` | `write` |
+| `write_concurrently` | `stream`, `writes` | Starts every write at once, in order |
+| `eof` | `stream` | `send_eof` |
+| `reset` | `stream`, `code` | `reset` |
+| `close` | optional `client`, `code`, `background` | `close` |
+| `wait_accepted` | `stream` | `wait_accepted` |
+| `cancel_read` | `stream` | Starts a read, cancels it after 5 ms |
+| `await` | `task`, optional `error`, `code` | Waits for a `background` step |
+| `settle` | optional `ms`, default 20 | Sleeps |
+
+**Steps on the network and server:**
+
+| Op | Fields | Does |
+|---|---|---|
+| `dial_fails` | `count` | The next dials fail |
+| `dial_gives_up` | | Every dial raises `GiveUp` |
+| `dial_hangs`, `dial_works` | | Dials wait, then go on |
+| `stall`, `release` | `side`, optional `link` | Holds one side of a link, or lets it go |
+| `break` | optional `link` | The link dies on both sides |
+| `drop` | optional `side`, `link` | That side sees it die, and the other does not. Default `client` |
+| `inject` | `side`, `link`, `wire` | A message arrives on that side, from nobody |
+| `small_transport` | `max_message_size` | Later dials give transports that size |
+| `set_context` | `value` | The context for later connections |
+| `close_session` | `code` | Closes the first server session |
+| `raw_connect` | optional `wire` | A transport with no client on it, sending those bytes |
+| `raw_hello` | `session_of`, `resuming` | The same, sending a `HELLO` with a client's session ID |
+| `record_states` | | Starts recording client states |
+| `record_server_close` | | Starts recording the code the session closes with |
+| `dial_count` | | Remembers how many dials there have been |
+
+`side` is `client` or `server`. `link` is `current`, the default, or `previous`.
+
+**Checks.** Those that wait fail after a few seconds:
+
+| Op | Fields | Checks |
+|---|---|---|
+| `expect_state` | `state`, optional `client` | Waits for a client state |
+| `expect_states` | `states` | The recorded states |
+| `expect_connected` | | The client is connected now |
+| `expect_closed` | optional `error`, `code` | Waits for the client to close, with that error, or none |
+| `expect_read` | `stream`, `data` | Reads until that many bytes have arrived, and compares |
+| `expect_eof` | `stream` | The next read is the end of stream |
+| `expect_error` | `stream`, `call`, `error`, optional `code` | `read`, `write` or `wait_accepted` fails that way |
+| `expect_stream_closed` | `stream`, `code` | `wait_closed` gives that reason |
+| `expect_pending` | `task` | A `background` step has not finished |
+| `expect_high_water` | `stream`, `value` | The read buffer high-water mark |
+| `expect_handler_saw` | `code` | `record-close` saw that reason |
+| `expect_sessions` | `count` | Waits for that many server sessions |
+| `expect_session_disconnected` | | Waits for the first session to disconnect |
+| `expect_server_close` | `code` | The recorded close code |
+| `expect_dials` | `min` | Waits for that many dials |
+| `expect_no_new_dials` | | No dials since `dial_count` |
+| `expect_session_ids_differ` | `a`, `b` | Two clients have different, valid IDs |
+| `expect_dial_ids_match` | `client` | The dial function got that client's ID |
+| `expect_raw_closed` | | The raw transport was closed |

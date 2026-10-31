@@ -1,119 +1,246 @@
-export type EnumOf<T extends string> = Readonly<Record<T, number>>;
+import type { StreamInfo as CoreStreamInfo } from './core.js';
 
-export const Status: EnumOf<'OK' | 'CLOSED' | 'NOT_CONNECTED' | 'ALREADY_CONNECTED' | 'EVENTS_PENDING' |
-  'UNKNOWN_STREAM' | 'INVALID_STATE' | 'LIMIT_EXCEEDED' | 'IDS_EXHAUSTED' | 'INVALID_ARGUMENT'>;
-export const CodecStatus: EnumOf<'OK' | 'TRUNCATED' | 'UNKNOWN_TYPE' | 'BAD_STREAM_ID' | 'PAYLOAD_TOO_LARGE' |
-  'BAD_PAYLOAD_SIZE' | 'UNSUPPORTED_VERSION' | 'BAD_IDENTIFIER' | 'INVALID_ARGUMENT' | 'BAD_FLAG'>;
-export const Role: EnumOf<'CLIENT' | 'SERVER'>;
-export const Reason: EnumOf<'OK' | 'PEER_CLOSED' | 'CONNECT_FAILED' | 'POLICY_DENIED' | 'LIMIT_EXCEEDED' |
-  'TRANSPORT_LOST' | 'KILLED' | 'AUTH_REVOKED' | 'TIMEOUT' | 'PROTOCOL_ERROR' | 'UNSUPPORTED_KIND' | 'SESSION_NOT_FOUND'>;
-export const FrameType: EnumOf<'UNKNOWN' | 'HELLO' | 'OPEN' | 'OPEN_OK' | 'OPEN_ERR' | 'DATA' | 'EOF' | 'RST' |
-  'PING' | 'PONG' | 'GOAWAY'>;
-export const EventType: EnumOf<'UNKNOWN' | 'CONNECTED' | 'STREAM_OPENED' | 'STREAM_ACCEPTED' | 'DATA' | 'EOF' |
-  'WRITABLE' | 'STREAM_CLOSED' | 'DISCONNECTED' | 'SESSION_CLOSED'>;
-export const SessionState: EnumOf<'DISCONNECTED' | 'HANDSHAKING' | 'ESTABLISHED' | 'DRAINING' | 'CLOSING' | 'CLOSED'>;
-export const StreamState: EnumOf<'SENDER_OPENING' | 'SENDER_OPENING_EOF_SENT' | 'RECEIVER_OPENING' |
-  'RECEIVER_OPENING_EOF_RECEIVED' | 'OPEN' | 'HALF_CLOSED_LOCAL' | 'HALF_CLOSED_REMOTE' | 'CLOSED'>;
-export const NO_DEADLINE: bigint;
+export { loadPacketMux } from './core.js';
+export const Reason: typeof import('./core.js').Reason;
 
-export class SessionError extends Error {
-  readonly status: number;
+export type ClientStateName = 'connecting' | 'connected' | 'reconnecting' | 'closed';
+export const ClientState: Readonly<{
+  CONNECTING: 'connecting';
+  CONNECTED: 'connected';
+  RECONNECTING: 'reconnecting';
+  CLOSED: 'closed';
+}>;
+
+// --- Errors --------------------------------------------------------------------------------------
+
+export class PacketMuxError extends Error {}
+/** A Transport has closed. Only code that implements a Transport sees this. */
+export class TransportClosed extends PacketMuxError {
+  constructor(message?: string, options?: { cause?: unknown });
+}
+export class StreamReset extends PacketMuxError {
+  readonly code: number;
+}
+/** Writing after sendEof, or after a clean close. */
+export class StreamClosed extends PacketMuxError {}
+/** No connection within connectTimeoutMs, or a server session is disconnected. */
+export class NoConnection extends PacketMuxError {}
+export class SessionClosed extends PacketMuxError {
+  readonly code: number;
+}
+/** The server no longer has this session. Connect again for a new one. */
+export class SessionNotFound extends SessionClosed {}
+/** maxStreams is reached, or stream IDs are exhausted. */
+export class LimitExceeded extends PacketMuxError {}
+/** Typed params do not match their declared fields. */
+export class InvalidParams extends PacketMuxError {}
+/** Throw from a dial function to stop reconnecting. The client closes with this error. */
+export class GiveUp extends PacketMuxError {}
+/** Throw from a handler to reject the stream. */
+export class Reject extends PacketMuxError {
+  constructor(code: number, message?: Uint8Array);
+  readonly code: number;
+}
+/** Throw from authorize to refuse the connection. */
+export class Refuse extends PacketMuxError {
+  constructor(code?: number);
+  readonly code: number;
 }
 
-export class CodecError extends Error {
-  readonly status: number;
+// --- Transport -----------------------------------------------------------------------------------
+
+/**
+ * One connection delivering whole messages, reliably and in order. After it closes, for any reason,
+ * send, recv and waitBufferBelow reject with TransportClosed. A message that arrives before recv is
+ * called must not be lost.
+ */
+export interface Transport {
+  readonly maxMessageSize: number;
+  /** Bytes accepted by send and not yet on the wire. */
+  readonly bufferedAmount: number;
+  send(message: Uint8Array): Promise<void>;
+  recv(): Promise<Uint8Array>;
+  waitBufferBelow(limit: number): Promise<void>;
+  /** Idempotent. */
+  close(): Promise<void>;
 }
 
-export interface SessionOptions {
-  role?: number;
-  sessionId: string;
+/** For sources that push: WebSocket, data channel. It keeps the queue behind recv. */
+export abstract class PushTransport implements Transport {
+  maxMessageSize: number;
+  abstract readonly bufferedAmount: number;
+  protected abstract sendMessage(message: Uint8Array): void | Promise<void>;
+  protected abstract closeSource(): void;
+  send(message: Uint8Array): Promise<void>;
+  recv(): Promise<Uint8Array>;
+  waitBufferBelow(limit: number): Promise<void>;
+  close(): Promise<void>;
+  /** Call with each whole message from the source. */
+  handleMessage(message: Uint8Array): void;
+  /** Call when the source closes. Give the error for an abnormal close. */
+  handleClose(error?: Error): void;
+  /** Call when the source's send buffer drains. */
+  handleBufferLow(): void;
+}
+
+// --- Typed params --------------------------------------------------------------------------------
+
+type FieldName = 'string' | 'int' | 'float' | 'bool';
+type FieldSpec = FieldName | `${FieldName}?` | { type: FieldName | `${FieldName}?`; default: unknown };
+type FieldValue<T> = T extends 'string' ? string
+  : T extends 'int' | 'float' ? number
+  : T extends 'bool' ? boolean
+  : T extends `${infer Base}?` ? FieldValue<Base> | null
+  : T extends { type: infer Inner } ? FieldValue<Inner>
+  : never;
+type Optional<F> = {
+  [K in keyof F]: F[K] extends { default: unknown } ? K : F[K] extends `${string}?` ? K : never
+}[keyof F];
+export type ParamsOf<F> = { [K in keyof F]: FieldValue<F[K]> };
+type ParamsInput<F> = Omit<ParamsOf<F>, Optional<F>> & Partial<Pick<ParamsOf<F>, Optional<F>>>;
+
+export interface TypedParams<F> {
+  readonly value: ParamsInput<F>;
+}
+
+export interface StreamType<F> {
+  (value: ParamsInput<F>): TypedParams<F>;
+  readonly kind: string;
+}
+
+/** Declares a stream type. TypeScript types do not exist at runtime, so fields are values. */
+export function defineStream<const F extends Record<string, FieldSpec>>(kind: string, fields: F): StreamType<F>;
+
+// --- Streams -------------------------------------------------------------------------------------
+
+export interface StreamInfo extends CoreStreamInfo {
+  readHighWater: number;
+}
+
+export class Stream implements AsyncIterable<Uint8Array> {
+  readonly id: number;
+  readonly kind: string;
+  readonly session: Client | ServerSession;
+  readonly isClosed: boolean;
+  readonly resetCode: number | null;
+  readonly readHighWater: number;
+  /** The next chunk. null means the peer half-closed and everything has been read. */
+  read(options?: { signal?: AbortSignal }): Promise<Uint8Array | null>;
+  /** Resolves once every byte is queued. Aborting leaves an unknown amount sent. */
+  write(data: Uint8Array, options?: { signal?: AbortSignal }): Promise<void>;
+  sendEof(): Promise<void>;
+  reset(code?: number): void;
+  waitAccepted(options?: { signal?: AbortSignal }): Promise<void>;
+  /** Resolves with the reason. Reason.OK means a clean close. */
+  waitClosed(): Promise<number>;
+  /** Details from the core, or null once the stream has closed. */
+  info(): StreamInfo | null;
+  [Symbol.asyncIterator](): AsyncGenerator<Uint8Array>;
+}
+
+/** A stream the peer opened. The handler accepts it or rejects it. */
+export class IncomingStream<P = Uint8Array> {
+  readonly kind: string;
+  readonly params: P;
+  readonly session: Client | ServerSession;
+  accept(): Stream;
+  reject(code: number, message?: Uint8Array): void;
+}
+
+export type Handler<P = Uint8Array> = (request: IncomingStream<P>) => Promise<void>;
+export type HandlerEntry =
+  | readonly [string, Handler]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | readonly [StreamType<any>, Handler<any>];
+
+// --- Client --------------------------------------------------------------------------------------
+
+export interface ClientOptions {
+  connectTimeoutMs?: number;
+  /** The last value repeats. */
+  reconnectBackoffMs?: readonly number[];
+  inflightLimit?: number;
+  maxReadBuffer?: number;
+  /** Core settings: maxStreams, pingIntervalMs, ... */
+  session?: Record<string, number>;
+}
+
+export interface ConnectOptions extends ClientOptions {
+  /** For streams the server opens. */
+  handlers?: readonly HandlerEntry[];
   capabilities?: Uint8Array;
-  maxDataPayload?: number;
-  maxControlPayload?: number;
-  maxStreams?: number;
-  maxQueuedBytes?: number;
-  maxQueuedBytesPerStream?: number;
-  maxQueuedControlFrames?: number;
-  maxOutstandingPings?: number;
-  helloTimeoutMs?: number;
-  pingIntervalMs?: number;
-  deadAfterMs?: number;
-  drainTimeoutMs?: number;
+  signal?: AbortSignal;
 }
 
-/** One event. It owns its bytes, so it stays valid after the next call. */
-export interface SessionEvent {
-  type: number;
-  streamId: number;
-  code: number;
-  codecStatus: number;
-  peerSessionId: string;
-  capabilities: Uint8Array;
-  kind: string;
-  params: Uint8Array;
-  data: Uint8Array;
+export class Client implements AsyncDisposable {
+  /** Generated by the SDK. */
+  readonly sessionId: string;
+  readonly state: ClientStateName;
+  readonly transport: Transport | null;
+  readonly rttMs: number | null;
+  /** Why it closed, if not by close(). */
+  readonly closeError: PacketMuxError | null;
+  /** Opens a stream, or waits for a connection first. It does not wait for OPEN_OK. */
+  openStream(
+    target: string | TypedParams<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
+    params?: Uint8Array,
+    options?: { signal?: AbortSignal },
+  ): Promise<Stream>;
+  streams(): StreamInfo[];
+  /** Returns a function that removes the listener. */
+  onStateChange(listener: (state: ClientStateName) => void): () => void;
+  close(code?: number): Promise<void>;
+  waitClosed(): Promise<void>;
+  [Symbol.asyncDispose](): Promise<void>;
 }
 
-export interface StreamInfo {
-  streamId: number;
-  kind: string;
-  opener: number;
-  state: number;
-  bytesSent: number;
-  bytesReceived: number;
-  createdAtMs: number;
-  lastActivityMs: number;
-}
+/** Resolves once the handshake has finished. Reconnecting after that is automatic. */
+export function connect(
+  dial: (sessionId: string) => Promise<Transport>,
+  options?: ConnectOptions,
+): Promise<Client>;
 
-export interface Frame {
-  type: number;
-  streamId: number;
-  version: number;
-  resuming: boolean;
+// --- Server --------------------------------------------------------------------------------------
+
+export interface ConnectRequest {
   sessionId: string;
   capabilities: Uint8Array;
-  kind: string;
-  params: Uint8Array;
-  code: number;
-  message: Uint8Array;
-  data: Uint8Array;
-  nonce: bigint;
+  resuming: boolean;
+  /** What the consumer passed to serve. */
+  context: unknown;
+  /** The existing session, or null. */
+  session: ServerSession | null;
 }
 
-export interface FrameLimits {
-  maxDataPayload?: number;
-  maxControlPayload?: number;
+export interface ServerOptions {
+  /** For streams the client opens. */
+  handlers?: readonly HandlerEntry[];
+  /** Returns data for session.data, or throws Refuse. */
+  authorize?: (request: ConnectRequest) => Promise<unknown>;
+  capabilities?: Uint8Array;
+  gracePeriodMs?: number;
+  maxSessions?: number;
+  inflightLimit?: number;
+  maxReadBuffer?: number;
+  session?: Record<string, number>;
 }
 
-/** See include/packetmux/Session.h. A status other than OK throws SessionError. */
-export interface Session {
-  /** Frees the WASM memory, which the garbage collector cannot see. */
-  destroy(): void;
-  attachConnection(nowMs: number): void;
-  onMessage(message: Uint8Array, nowMs: number): void;
-  onConnectionLost(): void;
-  onTick(nowMs: number): void;
-  nextDeadlineMs(): number | null;
-  close(code: number, nowMs: number): void;
-  openStream(kind: string, params: Uint8Array | null, nowMs: number): number;
-  acceptStream(streamId: number): void;
-  rejectStream(streamId: number, code: number, message?: Uint8Array): void;
-  /** Returns how many bytes were accepted, which may be 0. */
-  write(streamId: number, data: Uint8Array, nowMs: number): number;
-  sendEof(streamId: number): void;
-  resetStream(streamId: number, code?: number): void;
-  pollTransmit(): Uint8Array | null;
-  pollEvent(): SessionEvent | null;
-  readonly state: number;
+export class ServerSession {
+  readonly sessionId: string;
+  readonly connected: boolean;
+  /** What authorize returned. */
+  readonly data: unknown;
   readonly rttMs: number | null;
-  listStreams(): StreamInfo[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  openStream(target: string | TypedParams<any>, params?: Uint8Array): Promise<Stream>;
+  streams(): StreamInfo[];
+  close(code?: number): Promise<void>;
 }
 
-export interface PacketMux {
-  Session: new (options: SessionOptions) => Session;
-  decodeFrame(message: Uint8Array, limits?: FrameLimits): Frame;
-  encodeFrame(frame: Partial<Frame>, limits?: FrameLimits): Uint8Array;
+export class Server {
+  constructor(options?: ServerOptions);
+  /** Runs one connection. Resolves when it ends. */
+  serve(transport: Transport, context?: unknown): Promise<void>;
+  sessions(): ServerSession[];
+  close(code?: number): Promise<void>;
 }
-
-/** Loads the WASM module once. Everything that needs it comes from here. */
-export function loadPacketMux(): Promise<PacketMux>;

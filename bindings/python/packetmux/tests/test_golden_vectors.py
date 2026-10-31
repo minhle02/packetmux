@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from packetmux import CodecError, CodecStatus, Frame, FrameType, Reason, decode_frame, encode_frame
+from packetmux.core import CodecError, CodecStatus, Frame, FrameType, Reason, decode_frame, encode_frame
 
 VECTORS = Path(__file__).resolve().parents[4] / "conformance/vectors/frames.txt"
 DEFAULT_LIMITS = {"max_data_payload": 16000, "max_control_payload": 32 * 1024}

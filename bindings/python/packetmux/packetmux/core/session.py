@@ -50,6 +50,17 @@ class StreamInfo:
     last_activity_ms: int
 
 
+def config_defaults() -> dict[str, int]:
+    """The core's default for every numeric setting, so no binding repeats them."""
+    config = _native.Config()
+    lib.packetmux_config_init(byref(config))
+    numbers = {name: getattr(config, name) for name, _ in _native.Config._fields_}
+    del numbers["role"], numbers["session_id"], numbers["capabilities"], numbers["limits"]
+    numbers["max_data_payload"] = config.limits.max_data_payload
+    numbers["max_control_payload"] = config.limits.max_control_payload
+    return numbers
+
+
 def _check(status: int) -> None:
     if status != Status.OK:
         raise SessionError(status)

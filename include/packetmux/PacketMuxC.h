@@ -24,6 +24,8 @@ extern "C" {
 #define PACKETMUX_API __declspec(dllexport)
 #elif defined(_WIN32) && defined(PACKETMUX_USING_DLL)
 #define PACKETMUX_API __declspec(dllimport)
+#elif defined(__GNUC__) || defined(__clang__)
+#define PACKETMUX_API __attribute__((visibility("default")))
 #else
 #define PACKETMUX_API
 #endif

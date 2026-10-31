@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 import {
   CodecStatus, EventType, FrameType, Reason, Role, SessionError, SessionState, Status, StreamState, loadPacketMux,
-} from '../index.js';
+} from '../core.js';
 
 const { Session, decodeFrame, encodeFrame } = await loadPacketMux();
 

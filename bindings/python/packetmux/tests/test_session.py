@@ -2,7 +2,7 @@
 
 import pytest
 
-from packetmux import (
+from packetmux.core import (
     EventType,
     Reason,
     Role,

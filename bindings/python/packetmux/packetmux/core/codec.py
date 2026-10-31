@@ -8,8 +8,6 @@ from . import _native
 from ._native import copy_of, lib, view_of
 from .constants import CodecStatus, FrameType, Reason
 
-DEFAULT_MAX_DATA_PAYLOAD = 16000
-DEFAULT_MAX_CONTROL_PAYLOAD = 32 * 1024
 _ENCODE_OVERHEAD = 32  # header and length fields
 
 
@@ -35,14 +33,21 @@ class Frame:
     nonce: int = 0
 
 
-def _limits(max_data_payload: int, max_control_payload: int) -> _native.Limits:
-    return _native.Limits(max_data_payload, max_control_payload)
+def _limits(max_data_payload: int | None, max_control_payload: int | None) -> _native.Limits:
+    config = _native.Config()
+    lib.packetmux_config_init(ctypes.byref(config))
+    limits = config.limits
+    if max_data_payload is not None:
+        limits.max_data_payload = max_data_payload
+    if max_control_payload is not None:
+        limits.max_control_payload = max_control_payload
+    return limits
 
 
 def decode_frame(
     message: bytes,
-    max_data_payload: int = DEFAULT_MAX_DATA_PAYLOAD,
-    max_control_payload: int = DEFAULT_MAX_CONTROL_PAYLOAD,
+    max_data_payload: int | None = None,
+    max_control_payload: int | None = None,
 ) -> Frame:
     """Decode one message. Everything is copied, so message can be released."""
     message = bytes(message)
@@ -69,8 +74,8 @@ def decode_frame(
 
 def encode_frame(
     frame: Frame,
-    max_data_payload: int = DEFAULT_MAX_DATA_PAYLOAD,
-    max_control_payload: int = DEFAULT_MAX_CONTROL_PAYLOAD,
+    max_data_payload: int | None = None,
+    max_control_payload: int | None = None,
 ) -> bytes:
     limits = _limits(max_data_payload, max_control_payload)
     session_id = frame.session_id.encode("ascii", "surrogateescape")

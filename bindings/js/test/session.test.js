@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 
-import { EventType, Reason, Role, SessionError, SessionState, Status, StreamState, loadPacketMux } from '../index.js';
+import { EventType, Reason, Role, SessionError, SessionState, Status, StreamState, loadPacketMux } from '../core.js';
 
 const NOW_MS = 1000;
 const bytes = (value) => new TextEncoder().encode(value);

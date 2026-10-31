@@ -13,5 +13,17 @@
     "sync/keepalive.json",
     "sync/errors.json",
     "sync/regressions.json"
+  ],
+  "params": [
+    "params/typed.json"
+  ],
+  "async": [
+    "async/client.json",
+    "async/server.json",
+    "async/streams.json",
+    "async/regressions.json"
+  ],
+  "transport": [
+    "transport/checks.json"
   ]
 }

@@ -1,12 +1,34 @@
 {
   "name": "packetmux",
-  "version": "0.1.0",
-  "description": "JS/WASM binding for the PacketMux session library",
+  "version": "0.2.0",
+  "description": "Many byte streams over one connection, with a session that survives reconnects",
   "type": "module",
-  "private": true,
   "main": "index.js",
   "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./core": {
+      "types": "./core.d.ts",
+      "default": "./core.js"
+    },
+    "./testing": {
+      "types": "./testing.d.ts",
+      "default": "./testing.js"
+    }
+  },
+  "files": [
+    "*.js",
+    "*.d.ts",
+    "dist/packetmux.mjs",
+    "dist/packetmux.wasm"
+  ],
   "scripts": {
     "test": "node --test \"test/*.test.js\""
+  },
+  "devDependencies": {
+    "ws": "^8.18.0"
   }
 }

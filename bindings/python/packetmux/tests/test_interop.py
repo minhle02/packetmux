@@ -8,7 +8,7 @@ from pathlib import Path
 
 from websockets.asyncio.server import ServerConnection, serve
 
-from packetmux import EventType, FrameType, Reason, Role, Session, SessionState, decode_frame
+from packetmux.core import EventType, FrameType, Reason, Role, Session, SessionState, decode_frame
 
 JS_BINDING = Path(__file__).resolve().parents[3] / "js"
 CLIENT = JS_BINDING / "test" / "interopClient.js"

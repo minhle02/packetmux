@@ -1,0 +1,13 @@
+{
+  "checks": [
+    "order",
+    "both-directions",
+    "oversize",
+    "bulk",
+    "buffer-wait",
+    "early-messages",
+    "close-fails-operations",
+    "peer-close",
+    "close-is-idempotent"
+  ]
+}

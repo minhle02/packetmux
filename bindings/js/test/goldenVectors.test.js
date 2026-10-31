@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { CodecError, CodecStatus, FrameType, Reason, loadPacketMux } from '../index.js';
+import { CodecError, CodecStatus, FrameType, Reason, loadPacketMux } from '../core.js';
 
 const text = readFileSync(new URL('../../../conformance/vectors/frames.txt', import.meta.url), 'utf8');
 

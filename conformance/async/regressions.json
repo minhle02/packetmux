@@ -1,0 +1,81 @@
+{
+  "scenarios": [
+    {"name": "a-replaced-connection-delivering-late-is-ignored", "requirement": "FR-SDK-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "stall", "side": "server"},
+      {"op": "drop"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "settle"},
+      {"op": "dial_count"},
+      {"op": "inject", "side": "server", "link": "previous", "wire": "ff"},
+      {"op": "settle"},
+      {"op": "expect_no_new_dials"},
+      {"op": "expect_connected"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aa"},
+      {"op": "expect_read", "stream": "s", "data": "aa"}
+    ]},
+    {"name": "a-replaced-connection-failing-late-is-ignored", "requirement": "FR-SDK-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "stall", "side": "server"},
+      {"op": "drop"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "settle"},
+      {"op": "dial_count"},
+      {"op": "drop", "side": "server", "link": "previous"},
+      {"op": "settle"},
+      {"op": "expect_no_new_dials"},
+      {"op": "expect_connected"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aa"},
+      {"op": "expect_read", "stream": "s", "data": "aa"}
+    ]},
+    {"name": "replaced-connection-takes-no-frames", "requirement": "FR-SDK-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "stall", "side": "server"},
+      {"op": "open", "on": "server", "kind": "echo", "as": "lost"},
+      {"op": "settle"},
+      {"op": "drop"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "settle"},
+      {"op": "stall", "side": "server"},
+      {"op": "open", "on": "server", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aabb"},
+      {"op": "settle"},
+      {"op": "release", "side": "server", "link": "previous"},
+      {"op": "settle"},
+      {"op": "release", "side": "server"},
+      {"op": "expect_read", "stream": "s", "data": "aabb"}
+    ]},
+    {"name": "a-replaced-transport-reporting-late-changes-nothing", "requirement": "FR-SDK-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "drop"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "settle"},
+      {"op": "break", "link": "previous"},
+      {"op": "settle"},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aa"},
+      {"op": "expect_read", "stream": "s", "data": "aa"}
+    ]},
+    {"name": "goaway-is-sent-before-the-transport-closes", "requirement": "FR-SDK-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "close_session", "code": "AUTH_REVOKED"},
+      {"op": "expect_closed", "error": "SessionClosed", "code": "AUTH_REVOKED"}
+    ]},
+    {"name": "connection-lost-during-close-is-harmless", "requirement": "FR-SDK-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "stall", "side": "client"},
+      {"op": "close", "background": "closing"},
+      {"op": "settle"},
+      {"op": "break"},
+      {"op": "await", "task": "closing"},
+      {"op": "expect_closed"}
+    ]}
+  ]
+}

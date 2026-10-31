@@ -5,19 +5,19 @@ from pathlib import Path
 
 import pytest
 
-import packetmux
+from packetmux import core
 
 HEADER = Path(__file__).resolve().parents[4] / "include/packetmux/PacketMuxC.h"
 
 ENUMS = {
-    "PACKETMUX_STATUS": packetmux.Status,
-    "PACKETMUX_CODEC_STATUS": packetmux.CodecStatus,
-    "PACKETMUX_ROLE": packetmux.Role,
-    "PACKETMUX_REASON": packetmux.Reason,
-    "PACKETMUX_FRAME_TYPE": packetmux.FrameType,
-    "PACKETMUX_EVENT_TYPE": packetmux.EventType,
-    "PACKETMUX_SESSION_STATE": packetmux.SessionState,
-    "PACKETMUX_STREAM_STATE": packetmux.StreamState,
+    "PACKETMUX_STATUS": core.Status,
+    "PACKETMUX_CODEC_STATUS": core.CodecStatus,
+    "PACKETMUX_ROLE": core.Role,
+    "PACKETMUX_REASON": core.Reason,
+    "PACKETMUX_FRAME_TYPE": core.FrameType,
+    "PACKETMUX_EVENT_TYPE": core.EventType,
+    "PACKETMUX_SESSION_STATE": core.SessionState,
+    "PACKETMUX_STREAM_STATE": core.StreamState,
 }
 
 

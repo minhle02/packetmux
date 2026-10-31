@@ -3,7 +3,7 @@
 // session. Prints what it saw as JSON.
 import { createHash } from 'node:crypto';
 
-import { EventType, Reason, Role, SessionState, loadPacketMux } from '../index.js';
+import { EventType, Reason, Role, SessionState, loadPacketMux } from '../core.js';
 
 const [url, requestSize, replySize] = process.argv.slice(2);
 

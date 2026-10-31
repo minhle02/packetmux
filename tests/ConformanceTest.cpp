@@ -469,13 +469,15 @@ TEST(ConformanceTest, ManifestProtocolVersionMatches) {
 // A runner loads files from the manifest, so a file left out of it never runs.
 TEST(ConformanceTest, ManifestListsEveryFile) {
   const Json manifest = readJson("manifest.json");
+  const std::vector<std::string> layers{"vectors", "sync", "params", "async",
+                                         "transport"};
   std::set<std::string> listed{"sync/setups.json"};
-  for (const char* const layer : {"vectors", "sync"}) {
+  for (const std::string& layer : layers) {
     for (const std::string path : manifest.at(layer)) {
       listed.insert(path);
     }
   }
-  for (const char* const layer : {"vectors", "sync"}) {
+  for (const std::string& layer : layers) {
     for (const std::filesystem::directory_entry& entry :
          std::filesystem::directory_iterator(CONFORMANCE_DIR + "/" + layer)) {
       const std::string path =

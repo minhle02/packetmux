@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.23)
+# Before project(), so that the compiler check sees it. The shared library ships in a wheel.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Oldest macOS the library loads on")
 project(PacketMux
     VERSION 1.0.0
     LANGUAGES CXX
@@ -53,6 +55,11 @@ if(BUILD_SHARED_LIBS)
     target_compile_definitions(packetmux
         PRIVATE PACKETMUX_BUILDING_DLL
         INTERFACE PACKETMUX_USING_DLL
+    )
+    # Only the C ABI is public. A shared library ships into other people's processes.
+    set_target_properties(packetmux PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
     )
 endif()
 

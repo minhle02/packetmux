@@ -1,40 +1,66 @@
-"""Python binding for PacketMux, a thin layer over the C ABI.
+"""PacketMux: many byte streams over one connection, and a session that survives reconnects.
 
-The session is sans-I/O and synchronous: the host owns the transport, feeds in
-messages and the time, and polls frames and events out. See
-include/packetmux/Session.h for the host loop.
+    from packetmux import connect
+
+    async with await connect(dial) as client:
+        stream = await client.open_stream("echo")
+        await stream.write(b"hello")
+
+You implement a Transport, and a dial function that opens one. The sync binding is packetmux.core.
 """
 
-from .codec import CodecError, Frame, decode_frame, encode_frame
-from .constants import (
-    NO_DEADLINE,
-    CodecStatus,
-    EventType,
-    FrameType,
-    Reason,
-    Role,
-    SessionState,
-    Status,
-    StreamState,
+from . import core
+from .client import Client, ClientOptions, ClientState, Dial, connect
+from .core import Reason
+from .errors import (
+    GiveUp,
+    InvalidParams,
+    LimitExceeded,
+    NoConnection,
+    PacketMuxError,
+    Refuse,
+    Reject,
+    SessionClosed,
+    SessionNotFound,
+    StreamClosed,
+    StreamReset,
+    TransportClosed,
 )
-from .session import Event, Session, SessionError, StreamInfo
+from .params import define_stream, stream_type
+from .server import Authorize, ConnectRequest, Server, ServerOptions, ServerSession
+from .stream import Handler, Handlers, IncomingStream, Stream, StreamInfo
+from .transport import Transport
 
 __all__ = [
-    "NO_DEADLINE",
-    "CodecError",
-    "CodecStatus",
-    "Event",
-    "EventType",
-    "Frame",
-    "FrameType",
+    "Authorize",
+    "Client",
+    "ClientOptions",
+    "ClientState",
+    "ConnectRequest",
+    "Dial",
+    "GiveUp",
+    "Handler",
+    "Handlers",
+    "IncomingStream",
+    "InvalidParams",
+    "LimitExceeded",
+    "NoConnection",
+    "PacketMuxError",
     "Reason",
-    "Role",
-    "Session",
-    "SessionError",
-    "SessionState",
-    "Status",
+    "Refuse",
+    "Reject",
+    "Server",
+    "ServerOptions",
+    "ServerSession",
+    "SessionClosed",
+    "SessionNotFound",
+    "Stream",
+    "StreamClosed",
     "StreamInfo",
-    "StreamState",
-    "decode_frame",
-    "encode_frame",
+    "StreamReset",
+    "Transport",
+    "TransportClosed",
+    "connect",
+    "define_stream",
+    "stream_type",
 ]

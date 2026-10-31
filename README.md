@@ -1,10 +1,20 @@
 # PacketMux
 
-One C++ library for multiplexing many byte streams over one connection, and for managing the
-session around them. It has no dependencies beyond the C++ standard library, and it does no I/O: your
-code owns the transport (WebSocket, WebRTC, ...), and the library handles the protocol logic.
+Many byte streams over one connection, with a session that survives reconnects.
 
-Python and TypeScript use the same core through thin bindings.
+One C++ library holds the protocol, with no dependencies beyond the C++ standard library. Python and
+TypeScript each have an async SDK on top of it. Your code implements one thing, a `Transport`, and
+says how to dial it. The SDK does the rest: handshake, keepalive, reconnecting, backpressure and a
+clean close.
+
+```python
+from packetmux import connect
+
+async with await connect(dial) as client:
+    stream = await client.open_stream("echo")
+    await stream.write(b"hello")
+    print(await stream.read())
+```
 
 ## How to build
 
@@ -20,6 +30,8 @@ uv run scripts/build.py wasm      # module for TypeScript / JS
 uv run scripts/build.py macos     # shared library for Python
 uv run scripts/build.py linux
 uv run scripts/build.py windows
+uv run scripts/build.py wheel     # Python package, for this operating system
+uv run scripts/build.py npm       # TypeScript package
 ```
 
 | Target | Output |
@@ -28,6 +40,8 @@ uv run scripts/build.py windows
 | `macos` | `build/macos/libpacketmux.dylib` |
 | `linux` | `build/linux/libpacketmux.so` |
 | `windows` | `build/windows/<build type>/packetmux.dll` |
+| `wheel` | `build/packages/packetmux-<version>-py3-none-<platform>.whl` |
+| `npm` | `build/packages/packetmux-<version>.tgz` |
 
 Options: `--build-type Debug|Release|RelWithDebInfo|MinSizeRel` (default `Release`) and `--clean`.
 
@@ -42,227 +56,225 @@ cmake -S . -B build/tests
 cmake --build build/tests --parallel
 ctest --test-dir build/tests
 
-# Python, including a real WebSocket test against JS (build the wasm target first)
+# Python, including real WebSocket tests against JS (build the wasm target first, and install JS)
 (cd bindings/python/packetmux && uv run pytest)
 
 # JS (build the wasm target first)
-(cd bindings/js && npm test)
+(cd bindings/js && npm install && npm test)
 ```
 
 To add another language, start with `docs/spec/BINDING.md`. `docs/spec/PROTOCOL.md` defines the
 protocol, and `conformance/` tests it.
 
-## How to integrate the library
+## How to use it
 
-The same rules apply in both languages:
+Install the package for your language, from `uv run scripts/build.py wheel` or `npm`:
 
-- **Create one session per peer**, not one per stream. A session survives reconnects. Open a stream
-  for each logical connection, such as one `adb shell`.
-- **The session never touches the network or the clock.** You pass it each received message and the
-  current time, and you take out frames to send and events to handle.
-- **After every session call, run the pump:** take events and frames until neither has any left. The
-  session refuses the next message if events are still waiting.
-- **Set one timer** for `next_deadline_ms()`. It changes after every call, and `null`/`None` means no
-  timer is needed.
-- **`write` can accept less than you gave it**, even 0. Keep the rest, and continue on a `WRITABLE`
-  event.
-- **Close your transport** when you get `DISCONNECTED` or `SESSION_CLOSED`. After `DISCONNECTED`, the
-  session stays usable: reconnect and call `attach` again. Its streams have ended, so open new ones.
-- **Report a closed transport with `on_connection_lost`**, always. It does nothing if the session
-  already ended that connection.
-- **`session_id` and stream kinds** may only contain `a-z`, `A-Z`, `0-9` and `-`.
-- **Time** is in milliseconds, from a monotonic clock, as a whole number.
+```sh
+pip install build/packages/packetmux-0.2.0-py3-none-macosx_11_0_arm64.whl
+npm install build/packages/packetmux-0.2.0.tgz
+```
 
-The bindings are synchronous. Calling them from `asyncio` or Promises is up to your code.
+A wheel contains native code, so it is built per platform. In a `pyproject.toml`:
+
+```toml
+[project]
+dependencies = ["packetmux @ file:///path/to/packetmux-0.2.0-py3-none-macosx_11_0_arm64.whl"]
+```
+
+What to know:
+
+- **A session is one relationship with a peer.** It survives reconnects, and the SDK generates its ID.
+- **A stream is one logical connection,** such as one `adb shell`. Streams end when a connection is
+  lost, with `TRANSPORT_LOST`. Open new ones after the reconnect.
+- **Reconnecting is automatic,** with no attempt limit. It stops when you close the client, when your
+  dial function raises `GiveUp`, or when the server ends the session.
+- **If the server no longer has the session,** the client closes with `SessionNotFound`. Connect again
+  for a new session.
+- **A reader that falls 16 MiB behind loses its stream,** with `LIMIT_EXCEEDED`. There is no flow
+  control per stream yet, so keep reading. Change the limit with `max_read_buffer`.
 
 ### Python
 
-Build the shared library, then make both the package and the library findable:
-
-```sh
-uv run scripts/build.py macos
-export PYTHONPATH=$PWD/bindings/python/packetmux
-export PACKETMUX_LIBRARY=$PWD/build/macos/libpacketmux.dylib
-```
-
-Or, to ship it with your application, copy the `bindings/python/packetmux/packetmux/` folder into
-your project and put the library file inside it. `PACKETMUX_LIBRARY` is then not needed.
-
-The binding has no runtime dependencies. A client looks like this, where `transport` is your own
-connection object:
+You write a `Transport` and a dial function:
 
 ```python
-import time
+import asyncio
 
-from packetmux import EventType, Reason, Role, Session
-
-session = Session(Role.CLIENT, "my-session-1")
-stream_id = 0
-
-
-def now_ms() -> int:
-    return time.monotonic_ns() // 1_000_000
+from packetmux import Transport, TransportClosed, connect
+from websockets.asyncio.client import connect as ws_connect
+from websockets.exceptions import ConnectionClosed
 
 
-def on_event(event) -> None:
-    if event.type == EventType.DATA:
-        print("received", event.data)
-    elif event.type == EventType.STREAM_CLOSED:
-        print("stream ended", event.code)  # Reason.OK means a clean close
-    elif event.type in (EventType.DISCONNECTED, EventType.SESSION_CLOSED):
-        transport.close()
+class WebSocketTransport(Transport):
+    def __init__(self, socket) -> None:
+        self._socket = socket
+
+    async def send(self, message: bytes) -> None:
+        try:
+            await self._socket.send(message)
+        except ConnectionClosed as error:
+            raise TransportClosed() from error
+
+    async def recv(self) -> bytes:
+        try:
+            return await self._socket.recv()
+        except ConnectionClosed as error:
+            raise TransportClosed() from error
+
+    @property
+    def buffered_amount(self) -> int:
+        return self._socket.transport.get_write_buffer_size()
+
+    async def close(self) -> None:
+        await self._socket.close()
 
 
-def pump() -> None:
-    """Run this after every session call."""
-    progress = True
-    while progress:
-        progress = False
-        while (event := session.poll_event()) is not None:
-            on_event(event)
-            progress = True
-        while (message := session.poll_transmit()) is not None:
-            transport.send(message)
-            progress = True
+async def dial(session_id: str) -> WebSocketTransport:
+    return WebSocketTransport(await ws_connect(f"ws://localhost:8000/mux?session={session_id}"))
 
 
-# Call these from your transport and your timer.
-def on_transport_connected() -> None:
-    global stream_id
-    session.attach_connection(now_ms())
-    stream_id = session.open_stream("tcp-forward", b"", now_ms())
-    session.write(stream_id, b"hello", now_ms())
-    session.send_eof(stream_id)
-    pump()
+async def main() -> None:
+    async with await connect(dial) as client:
+        stream = await client.open_stream("echo")
+        await stream.write(b"hello")
+        await stream.send_eof()
+        async for chunk in stream:
+            print(chunk)
 
 
-def on_transport_message(message: bytes) -> None:
-    session.on_message(message, now_ms())
-    pump()
-
-
-def on_transport_closed() -> None:
-    session.on_connection_lost()
-    pump()
-
-
-def on_timer() -> None:
-    session.on_tick(now_ms())
-    pump()
+asyncio.run(main())
 ```
 
-A status other than OK raises `SessionError`. Use `session.destroy()`, or `with Session(...)`, to
-free the native session.
-
-A server does not know which session a new connection belongs to until the first message arrives,
-so it reads that message first. It also has to answer streams the peer opens:
+A server hands each accepted connection to `serve`, and registers a handler for each kind of stream:
 
 ```python
-from packetmux import Reason, Role, Session, decode_frame
-
-sessions: dict[str, Session] = {}
+from packetmux import ConnectRequest, IncomingStream, Refuse, Server
 
 
-def on_new_connection(first_message: bytes, now_ms: int) -> Session:
-    hello = decode_frame(first_message)
-    # Check the client is allowed in here: the library does not authenticate.
-    session = sessions.get(hello.session_id)
-    if session is None:
-        session = sessions[hello.session_id] = Session(Role.SERVER, hello.session_id)
-    session.on_connection_lost()  # the client may have re-dialed before the old connection died
-    while session.poll_event() is not None:
-        pass  # in your host, handle these: the old streams have ended
-    session.attach_connection(now_ms)
-    session.on_message(first_message, now_ms)
-    return session
+async def echo(request: IncomingStream) -> None:
+    stream = request.accept()
+    async for chunk in stream:
+        await stream.write(chunk)
 
 
-def on_stream_opened(session: Session, event) -> None:
-    if event.kind == "tcp-forward":
-        session.accept_stream(event.stream_id)
-    else:
-        session.reject_stream(event.stream_id, Reason.UNSUPPORTED_KIND)
+async def authorize(request: ConnectRequest) -> str:
+    """Runs before an existing session is touched. Return who the peer is, or raise Refuse."""
+    user = check_token(request.context)
+    if request.session is not None and request.session.data != user:
+        raise Refuse()
+    return user
+
+
+server = Server(handlers=[("echo", echo)], authorize=authorize)
+
+
+async def on_websocket(socket, token: str) -> None:  # however your web framework calls you
+    await server.serve(WebSocketTransport(socket), context=token)
 ```
+
+Declare a stream type to send typed params, and the SDK encodes and checks them on both sides:
+
+```python
+from dataclasses import dataclass
+
+from packetmux import IncomingStream, Server, stream_type
+
+
+@stream_type("tcp-forward")
+@dataclass
+class TcpForward:
+    host: str
+    port: int
+    timeout: float | None = None
+
+
+async def forward(request: IncomingStream[TcpForward]) -> None:
+    target = request.params
+    stream = request.accept()
+    await stream.write(f"connected to {target.host}:{target.port}".encode())
+
+
+server = Server(handlers=[(TcpForward, forward)])
+
+# On the client:
+#     stream = await client.open_stream(TcpForward(host="127.0.0.1", port=5037))
+```
+
+`packetmux.testing` has an in-memory transport for your tests, and `check_transport` runs every check
+a `Transport` has to pass.
 
 ### TypeScript
 
-Build the WASM module, then add the binding to your project:
-
-```sh
-uv run scripts/build.py wasm
-npm install /path/to/PacketMux/bindings/js
-```
-
-The package includes its types. Load the module once, then create sessions from it:
+The same concepts, in TypeScript's style. Durations are in milliseconds, and `read` returns `null` at
+the end of a stream. `PushTransport` holds the queue behind `recv`, for sources that push:
 
 ```ts
-import { EventType, Reason, Role, loadPacketMux } from 'packetmux'
-import type { SessionEvent } from 'packetmux'
+import { PushTransport, connect } from 'packetmux'
 
-const { Session } = await loadPacketMux()
-const session = new Session({ role: Role.CLIENT, sessionId: 'my-session-1' })
+class WebSocketTransport extends PushTransport {
+  constructor(private readonly socket: WebSocket) {
+    super()
+    socket.binaryType = 'arraybuffer'
+    socket.onmessage = (event: MessageEvent<ArrayBuffer>) => this.handleMessage(new Uint8Array(event.data))
+    socket.onclose = () => this.handleClose()
+  }
 
-// Math.floor matters: the time must be a whole number.
-const nowMs = (): number => Math.floor(performance.now())
+  get bufferedAmount(): number {
+    return this.socket.bufferedAmount
+  }
 
-const socket = new WebSocket('ws://localhost:8000/transport')
-socket.binaryType = 'arraybuffer'
+  protected sendMessage(message: Uint8Array): void {
+    this.socket.send(message)
+  }
 
-function onEvent(event: SessionEvent): void {
-  if (event.type === EventType.DATA) {
-    console.log('received', event.data)
-  } else if (event.type === EventType.STREAM_CLOSED) {
-    console.log('stream ended', event.code) // Reason.OK means a clean close
-  } else if (event.type === EventType.DISCONNECTED || event.type === EventType.SESSION_CLOSED) {
-    socket.close()
+  protected closeSource(): void {
+    this.socket.close()
   }
 }
 
-// Run this after every session call.
-function pump(): void {
-  let progress = true
-  while (progress) {
-    progress = false
-    for (let event = session.pollEvent(); event !== null; event = session.pollEvent()) {
-      onEvent(event)
-      progress = true
-    }
-    for (let message = session.pollTransmit(); message !== null; message = session.pollTransmit()) {
-      socket.send(message)
-      progress = true
-    }
-  }
+function dial(sessionId: string): Promise<WebSocketTransport> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(`ws://localhost:8000/mux?session=${sessionId}`)
+    socket.onopen = () => resolve(new WebSocketTransport(socket))
+    socket.onerror = () => reject(new Error('cannot connect'))
+  })
 }
 
-socket.onopen = () => {
-  session.attachConnection(nowMs())
-  const streamId = session.openStream('tcp-forward', null, nowMs())
-  session.write(streamId, new TextEncoder().encode('hello'), nowMs())
-  session.sendEof(streamId)
-  pump()
+const client = await connect(dial)
+const stream = await client.openStream('echo')
+await stream.write(new TextEncoder().encode('hello'))
+await stream.sendEof()
+for await (const chunk of stream) {
+  console.log(chunk)
 }
-
-socket.onmessage = (message: MessageEvent<ArrayBuffer>) => {
-  session.onMessage(new Uint8Array(message.data), nowMs())
-  pump()
-}
-
-socket.onclose = () => {
-  session.onConnectionLost()
-  pump()
-}
-
-// When the session is finished. WASM memory is not garbage-collected.
-export function shutdown(): void {
-  session.close(Reason.OK, nowMs())
-  pump()
-  session.destroy()
-}
+await client.close()
 ```
 
-A status other than OK throws `SessionError`. Timers work as in Python: set one for
-`session.nextDeadlineMs()`, and call `session.onTick(nowMs())` then `pump()` when it fires.
+Typed params declare their fields as values, because TypeScript types do not exist at runtime:
 
-So far the binding has only been run in Node. Loading the WASM file in a browser or an Electron
-renderer has not been tested yet, and your bundler may need to be told where to find
-`packetmux.wasm`.
+```ts
+import { IncomingStream, ParamsOf, Server, defineStream } from 'packetmux'
+
+const fields = { host: 'string', port: 'int', timeout: { type: 'float?', default: null } } as const
+const TcpForward = defineStream('tcp-forward', fields)
+
+async function forward(request: IncomingStream<ParamsOf<typeof fields>>): Promise<void> {
+  const { host, port } = request.params
+  const stream = request.accept()
+  await stream.write(new TextEncoder().encode(`connected to ${host}:${port}`))
+}
+
+const server = new Server({ handlers: [[TcpForward, forward]] })
+
+// On the client:
+//     const stream = await client.openStream(TcpForward({ host: '127.0.0.1', port: 5037 }))
+```
+
+If your bundler moves `packetmux.wasm`, call `loadPacketMux({ wasmUrl })` before anything else.
+
+### Without the SDK
+
+The sync binding is `packetmux.core` in Python and `packetmux/core` in TypeScript. It is sans-I/O: you
+own the event loop and keep the host rules in `docs/spec/BINDING.md` yourself. Almost every consumer
+should use the SDK.

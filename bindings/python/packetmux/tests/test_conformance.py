@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from packetmux import (
+from packetmux.core import (
     CodecStatus,
     EventType,
     Frame,

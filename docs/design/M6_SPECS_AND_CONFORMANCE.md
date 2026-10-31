@@ -418,6 +418,6 @@ The Python and JS runners met the 200-line target, at 189 and 183 lines. The C++
 because C++ has no reflection, so it spells out every enum name.
 
 Not done:
-- **The params, async and transport layers.** Their formats are in §3.6, and they are built in M7.
-- **FR-CONF-5,** which makes the transport checks available to consumers. It comes with those layers.
+- **The params, async and transport layers.** Built in M7. `conformance/README.md` has their final
+  formats, which replace §3.6.
 - **ASan, Linux, Windows.** Unchanged, and they belong to M5.

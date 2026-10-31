@@ -1,0 +1,123 @@
+{
+  "scenarios": [
+    {"name": "a-first-message-that-is-not-hello-closes-the-transport", "requirement": "FR-SRV-2", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "raw_connect", "wire": "0500000001aa"},
+      {"op": "expect_raw_closed"},
+      {"op": "expect_sessions", "count": 0}
+    ]},
+    {"name": "garbage-closes-the-transport", "requirement": "FR-SRV-2", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "raw_connect", "wire": "ff"},
+      {"op": "expect_raw_closed"},
+      {"op": "expect_sessions", "count": 0}
+    ]},
+    {"name": "no-hello-closes-the-transport", "requirement": "FR-SRV-2", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500, "session": {"hello_timeout_ms": 10}}, "steps": [
+      {"op": "raw_connect"},
+      {"op": "expect_raw_closed"},
+      {"op": "expect_sessions", "count": 0}
+    ]},
+    {"name": "authorize-can-refuse", "requirement": "FR-SRV-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "authorize": "refuse:AUTH_REVOKED", "steps": [
+      {"op": "connect", "expect_error": "SessionClosed", "expect_code": "AUTH_REVOKED"},
+      {"op": "expect_sessions", "count": 0}
+    ]},
+    {"name": "authorize-stops-a-takeover", "requirement": "FR-SRV-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "authorize": "owner", "steps": [
+      {"op": "set_context", "value": "alice"},
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aabb"},
+      {"op": "expect_read", "stream": "s", "data": "aabb"},
+      {"op": "set_context", "value": "mallory"},
+      {"op": "raw_hello", "session_of": "client", "resuming": true},
+      {"op": "expect_raw_closed"},
+      {"op": "write", "stream": "s", "data": "cc"},
+      {"op": "expect_read", "stream": "s", "data": "cc"}
+    ]},
+    {"name": "authorize-allows-the-owner-back", "requirement": "FR-SRV-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "authorize": "owner", "steps": [
+      {"op": "set_context", "value": "alice"},
+      {"op": "connect"},
+      {"op": "break"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "cc"},
+      {"op": "expect_read", "stream": "s", "data": "cc"}
+    ]},
+    {"name": "max-sessions-refuses-a-new-one", "requirement": "FR-SRV-6", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500, "max_sessions": 1}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "connect", "as": "second", "expect_error": "SessionClosed", "expect_code": "LIMIT_EXCEEDED"},
+      {"op": "write", "stream": "s", "data": "aa"},
+      {"op": "expect_read", "stream": "s", "data": "aa"},
+      {"op": "expect_sessions", "count": 1}
+    ]},
+    {"name": "redial-replaces-a-live-connection", "requirement": "FR-SRV-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aabb"},
+      {"op": "expect_read", "stream": "s", "data": "aabb"},
+      {"op": "drop"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "open", "kind": "echo", "as": "again"},
+      {"op": "write", "stream": "again", "data": "cc"},
+      {"op": "expect_read", "stream": "again", "data": "cc"}
+    ]},
+    {"name": "replacing-does-not-start-the-grace-period", "requirement": "FR-SRV-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500, "grace_period_ms": 10}, "steps": [
+      {"op": "connect"},
+      {"op": "drop"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "settle", "ms": 40},
+      {"op": "expect_sessions", "count": 1},
+      {"op": "open", "kind": "echo", "as": "again"},
+      {"op": "write", "stream": "again", "data": "cc"},
+      {"op": "expect_read", "stream": "again", "data": "cc"}
+    ]},
+    {"name": "grace-period-closes-a-disconnected-session", "requirement": "FR-SRV-5", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500, "grace_period_ms": 5}, "steps": [
+      {"op": "connect"},
+      {"op": "dial_hangs"},
+      {"op": "break"},
+      {"op": "expect_sessions", "count": 0}
+    ]},
+    {"name": "session-survives-within-the-grace-period", "requirement": "FR-SRV-5", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "dial_hangs"},
+      {"op": "break"},
+      {"op": "settle"},
+      {"op": "expect_sessions", "count": 1},
+      {"op": "dial_works"},
+      {"op": "expect_state", "state": "connected"}
+    ]},
+    {"name": "attaching-cancels-the-grace-timer", "requirement": "FR-SRV-5", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500, "grace_period_ms": 60}, "steps": [
+      {"op": "connect"},
+      {"op": "break"},
+      {"op": "expect_dials", "min": 2},
+      {"op": "expect_state", "state": "connected"},
+      {"op": "settle", "ms": 120},
+      {"op": "expect_sessions", "count": 1},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aa"},
+      {"op": "expect_read", "stream": "s", "data": "aa"}
+    ]},
+    {"name": "sessions-can-be-listed-and-closed", "requirement": "FR-SRV-7", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "expect_sessions", "count": 1},
+      {"op": "close_session", "code": "KILLED"},
+      {"op": "expect_sessions", "count": 0},
+      {"op": "expect_closed", "error": "SessionClosed", "code": "KILLED"}
+    ]},
+    {"name": "server-opens-a-stream", "requirement": "FR-AST-1", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "on": "server", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aa"},
+      {"op": "expect_read", "stream": "s", "data": "aa"}
+    ]},
+    {"name": "server-open-fails-while-disconnected", "requirement": "FR-CLI-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "dial_hangs"},
+      {"op": "break"},
+      {"op": "expect_session_disconnected"},
+      {"op": "open", "on": "server", "kind": "echo", "as": "s", "expect_error": "NoConnection"}
+    ]}
+  ]
+}

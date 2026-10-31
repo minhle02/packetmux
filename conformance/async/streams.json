@@ -1,0 +1,163 @@
+{
+  "scenarios": [
+    {"name": "write-before-the-peer-accepts", "requirement": "FR-AST-1", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aabb"},
+      {"op": "expect_read", "stream": "s", "data": "aabb"}
+    ]},
+    {"name": "wait-accepted", "requirement": "FR-AST-1", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "wait_accepted", "stream": "s"}
+    ]},
+    {"name": "unknown-kind-is-rejected", "requirement": "FR-AST-2", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "nothing", "as": "s"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "UNSUPPORTED_KIND"}
+    ]},
+    {"name": "handler-can-reject", "requirement": "FR-AST-2", "handlers": {"echo": "echo", "deny": "reject:POLICY_DENIED"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "deny", "as": "s"},
+      {"op": "expect_error", "stream": "s", "call": "wait_accepted", "error": "StreamReset", "code": "POLICY_DENIED"}
+    ]},
+    {"name": "handler-failure-before-accept", "requirement": "FR-AST-2", "handlers": {"echo": "echo", "boom": "fail"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "boom", "as": "s"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "CONNECT_FAILED"}
+    ]},
+    {"name": "handler-failure-after-accept", "requirement": "FR-AST-2", "handlers": {"echo": "echo", "boom": "accept-then-fail"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "boom", "as": "s"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "KILLED"}
+    ]},
+    {"name": "handler-returning-without-accepting", "requirement": "FR-AST-2", "handlers": {"echo": "echo", "quiet": "return"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "quiet", "as": "s"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "POLICY_DENIED"}
+    ]},
+    {"name": "handler-returning-after-accepting-sends-eof", "requirement": "FR-AST-2", "handlers": {"echo": "echo", "done": "reply:6869"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "done", "as": "s"},
+      {"op": "expect_read", "stream": "s", "data": "6869"},
+      {"op": "expect_eof", "stream": "s"},
+      {"op": "eof", "stream": "s"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "OK"}
+    ]},
+    {"name": "large-write-is-intact", "requirement": "FR-AST-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": {"repeat": "ab", "count": 1048576}},
+      {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 1048576}}
+    ]},
+    {"name": "concurrent-writes-do-not-interleave", "requirement": "FR-AST-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write_concurrently", "stream": "s", "writes": [{"repeat": "aa", "count": 300000}, {"repeat": "bb", "count": 300000}]},
+      {"op": "expect_read", "stream": "s", "data": {"repeat": "aa", "count": 300000}},
+      {"op": "expect_read", "stream": "s", "data": {"repeat": "bb", "count": 300000}}
+    ]},
+    {"name": "blocked-writer-wakes", "requirement": "FR-AST-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "stall", "side": "client"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": {"repeat": "ab", "count": 1048576}, "background": "writing"},
+      {"op": "settle"},
+      {"op": "expect_pending", "task": "writing"},
+      {"op": "release", "side": "client"},
+      {"op": "await", "task": "writing"},
+      {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 1048576}}
+    ]},
+    {"name": "blocked-writer-fails-when-the-stream-ends", "requirement": "FR-AST-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "stall", "side": "client"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": {"repeat": "ab", "count": 1048576}, "background": "writing"},
+      {"op": "settle"},
+      {"op": "break"},
+      {"op": "await", "task": "writing", "error": "StreamReset", "code": "TRANSPORT_LOST"}
+    ]},
+    {"name": "eof-waits-for-a-write-in-progress", "requirement": "FR-AST-3", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": {"repeat": "ab", "count": 1048576}, "background": "writing"},
+      {"op": "eof", "stream": "s"},
+      {"op": "await", "task": "writing"},
+      {"op": "expect_read", "stream": "s", "data": {"repeat": "ab", "count": 1048576}},
+      {"op": "expect_eof", "stream": "s"}
+    ]},
+    {"name": "read-returns-the-end-of-stream", "requirement": "FR-AST-4", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aa"},
+      {"op": "eof", "stream": "s"},
+      {"op": "expect_read", "stream": "s", "data": "aa"},
+      {"op": "expect_eof", "stream": "s"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "OK"}
+    ]},
+    {"name": "a-reset-wins-over-buffered-data", "requirement": "D18", "handlers": {"echo": "echo", "abort": "reply-then-reset:6869"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "abort", "as": "s"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "KILLED"},
+      {"op": "expect_error", "stream": "s", "call": "read", "error": "StreamReset", "code": "KILLED"}
+    ]},
+    {"name": "write-after-eof-fails", "requirement": "FR-STR-11", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "eof", "stream": "s"},
+      {"op": "expect_error", "stream": "s", "call": "write", "error": "StreamClosed"}
+    ]},
+    {"name": "read-buffer-limit-resets-only-that-stream", "requirement": "FR-AST-5", "handlers": {"echo": "echo", "flood": "flood:5000"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500, "max_read_buffer": 1000}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "other"},
+      {"op": "open", "kind": "flood", "as": "s"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "LIMIT_EXCEEDED"},
+      {"op": "write", "stream": "other", "data": "aa"},
+      {"op": "expect_read", "stream": "other", "data": "aa"}
+    ]},
+    {"name": "reset-reaches-the-peer", "requirement": "FR-AST-6", "handlers": {"echo": "echo", "wait": "record-close"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "wait", "as": "s"},
+      {"op": "wait_accepted", "stream": "s"},
+      {"op": "reset", "stream": "s", "code": "KILLED"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "KILLED"},
+      {"op": "expect_handler_saw", "code": "KILLED"}
+    ]},
+    {"name": "read-high-water-is-reported", "requirement": "FR-AST-6", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "write", "stream": "s", "data": "aabbcc"},
+      {"op": "settle"},
+      {"op": "expect_high_water", "stream": "s", "value": 3},
+      {"op": "expect_read", "stream": "s", "data": "aabbcc"}
+    ]},
+    {"name": "cancelling-a-read-leaves-the-stream-usable", "requirement": "FR-SDK-5", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "echo", "as": "s"},
+      {"op": "cancel_read", "stream": "s"},
+      {"op": "write", "stream": "s", "data": "aa"},
+      {"op": "expect_read", "stream": "s", "data": "aa"}
+    ]},
+    {"name": "typed-params-reach-the-handler", "requirement": "FR-AST-8", "handlers": {"echo": "echo", "typed": {"behaviour": "reply-params", "fields": {"host": "string", "port": "int"}}}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open_typed", "kind": "typed", "as": "s", "fields": {"host": "string", "port": "int"}, "value": {"host": "h", "port": 7}},
+      {"op": "expect_read", "stream": "s", "data": "683a37"}
+    ]},
+    {"name": "bad-params-are-rejected-before-the-handler", "requirement": "FR-AST-9", "handlers": {"echo": "echo", "typed": {"behaviour": "reply-params", "fields": {"host": "string", "port": "int"}}}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "typed", "as": "s", "params": "7b22706f7274223a227772616e67227d"},
+      {"op": "expect_stream_closed", "stream": "s", "code": "PROTOCOL_ERROR"},
+      {"op": "expect_connected"}
+    ]},
+    {"name": "bad-outgoing-params-send-nothing", "requirement": "FR-AST-9", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open_typed", "kind": "typed", "as": "s", "fields": {"host": "string", "port": "int"}, "value": {"host": 1, "port": 7}, "expect_error": "InvalidParams"},
+      {"op": "expect_connected"}
+    ]},
+    {"name": "raw-params-reach-the-handler", "requirement": "FR-AST-8", "handlers": {"echo": "echo", "raw": "reply-raw-params"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "raw", "as": "s", "params": "0102"},
+      {"op": "expect_read", "stream": "s", "data": "0102"}
+    ]}
+  ]
+}

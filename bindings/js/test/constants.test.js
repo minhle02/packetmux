@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { CodecStatus, EventType, FrameType, Reason, Role, SessionState, Status, StreamState } from '../index.js';
+import { CodecStatus, EventType, FrameType, Reason, Role, SessionState, Status, StreamState } from '../core.js';
 
 const header = readFileSync(new URL('../../../include/packetmux/PacketMuxC.h', import.meta.url), 'utf8');
 const blocks = [...header.matchAll(/enum \{(.*?)\};/gs)].map((match) => [...match[1].matchAll(/PACKETMUX_\w+/g)].map((name) => name[0]));
