@@ -292,6 +292,7 @@ stream: a client's name, or `server` for its first session.
 | `expect_stream_closed` | `stream`, `code` | `wait_closed` gives that reason |
 | `expect_pending` | `task` | A `background` step has not finished |
 | `expect_high_water` | `stream`, `value` | The read buffer high-water mark |
+| `expect_stream_info` | `stream`, `send_credit`, `read_high_water` | `Stream.info()` and the client's `streams()` both report these |
 | `expect_handler_saw` | `code` | `record-close` saw that reason |
 | `expect_sessions` | `count` | Waits for that many server sessions |
 | `expect_session_disconnected` | | Waits for the first session to disconnect |

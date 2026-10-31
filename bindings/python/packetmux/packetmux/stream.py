@@ -24,6 +24,7 @@ class StreamInfo:
     bytes_received: int
     created_at_ms: int
     last_activity_ms: int
+    send_credit: int
     read_high_water: int
 
 

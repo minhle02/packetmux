@@ -119,6 +119,12 @@
       {"op": "expect_read", "stream": "other", "data": "aabb"},
       {"op": "expect_bytes", "stream": "s", "count": 600000}
     ]},
+    {"name": "stream-info-reports-credit-and-the-read-buffer", "requirement": "FR-AST-6", "handlers": {"reply": "reply:aabb"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
+      {"op": "connect"},
+      {"op": "open", "kind": "reply", "as": "s"},
+      {"op": "settle"},
+      {"op": "expect_stream_info", "stream": "s", "send_credit": 262144, "read_high_water": 2}
+    ]},
     {"name": "a-transfer-many-windows-long-completes", "requirement": "FR-FC-16", "handlers": {"echo": "echo"}, "options": {"reconnect_backoff_ms": [1], "connect_timeout_ms": 500}, "steps": [
       {"op": "connect"},
       {"op": "open", "kind": "echo", "as": "s"},

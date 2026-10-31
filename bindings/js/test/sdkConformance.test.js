@@ -399,6 +399,14 @@ const asyncSteps = {
   async expect_sessions(h, s) { await h.until(() => h.server.sessions().length === s.count, s); },
   async expect_state(h, s) { await h.until(() => h.client(s).state === s.state, s); },
   async expect_states(h, s) { assert.deepEqual(h.states, s.states); },
+  async expect_stream_info(h, s) {
+    const stream = h.streams.get(s.stream);
+    const listed = h.client(s).streams().filter((info) => info.streamId === stream.id);
+    for (const info of [stream.info(), ...listed]) {
+      assert.equal(info.sendCredit, s.send_credit);
+      assert.equal(info.readHighWater, s.read_high_water);
+    }
+  },
   async expect_stream_closed(h, s) {
     assert.equal(await timed(h.streams.get(s.stream).waitClosed()), Reason[s.code]);
   },

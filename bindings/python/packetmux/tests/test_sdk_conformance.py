@@ -269,6 +269,14 @@ async def do_expect_read(h: Harness, s: dict) -> None:
     assert bytes(received) == expected
 
 
+async def do_expect_stream_info(h: Harness, s: dict) -> None:
+    stream = h.streams[s["stream"]]
+    listed = [info for info in h.client(s).streams() if info.stream_id == stream.id]
+    for info in (stream.info(), *listed):
+        assert info.send_credit == s["send_credit"]
+        assert info.read_high_water == s["read_high_water"]
+
+
 async def do_expect_bytes(h: Harness, s: dict) -> None:
     received = 0
     while received < s["count"]:
@@ -552,6 +560,7 @@ ASYNC_STEPS = {
     "expect_session_transport": do_expect_session_transport,
     "expect_sessions": do_expect_sessions,
     "expect_state": do_expect_state,
+    "expect_stream_info": do_expect_stream_info,
     "expect_states": do_expect_states,
     "expect_stream_closed": do_expect_stream_closed,
     "open": do_open,
